@@ -1,0 +1,17 @@
+# Зависимости
+node_modules/
+
+# Next.js артефакты
+.next/
+out/
+
+# Билды и статика
+build/
+dist/
+public/
+
+# Конфиги, которые лучше не трогать
+*.min.js
+*.min.css
+package-lock.json
+yarn.lock

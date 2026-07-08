@@ -1,0 +1,48 @@
+// // package middleware
+// package middleware
+
+// import (
+// 	"fmt"
+// 	"io"
+// 	"log"
+// 	"net/http"
+// 	"time"
+// )
+
+// func RequestLogger(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		start := time.Now()
+
+// 		bodyCopy, _ := io.ReadAll(r.Body)
+// 		r.Body = io.NopCloser(io.MultiReader(
+// 			io.Reader(bodyCopy),
+// 			io.NopCloser(r.Body)))
+
+// 		log.Printf("[LOG] %s %s | %d bytes", r.Method, r.URL.Path, len(bodyCopy))
+
+// 		next.ServeHTTP(w, r)
+
+// 		duration := time.Since(start).Milliseconds()
+// 		status := w.Header().Get("Content-Type")
+// 		log.Printf("[LOG] %v [%d] %s %s - %.0fms", time.Now().Format(time.RFC3339), w.Status(), status, r.Method+" "+r.URL.Path, duration)
+// 	})
+// }
+
+// // --- Session/JWT Middleware ---
+
+// func SessionAuth(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+// 		cookie, err := r.Cookie("session")
+
+// 		if cookie == nil || err != nil {
+// 			w.Header().Set("Content-Type", "application/json")
+// 			w.WriteHeader(http.StatusUnauthorized)
+// 			fmt.Fprintf(w, `{"code":401,"message":"unauthorized"}`)
+// 			return
+// 		}
+
+// 		next.ServeHTTP(w, r.WithContext(r.Context())) // context key будет добавлен позже
+
+// 	})
+// }

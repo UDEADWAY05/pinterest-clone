@@ -1,0 +1,17 @@
+// package middleware
+
+// import (
+// 	"context"
+// 	"net/http"
+// 	"pinterest-core/internal/usecase"
+// )
+
+// type contextKey string
+// const UserIDKey contextKey = "userID"
+
+// func AuthMiddleware(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+// 		next.ServeHTTP(w, r)
+// 	})
+// }

@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS interactions;
+DROP TABLE IF EXISTS board_pins;
+DROP TABLE IF EXISTS boards;
+DROP TABLE IF EXISTS pins;
+DROP TABLE IF EXISTS users;
+     

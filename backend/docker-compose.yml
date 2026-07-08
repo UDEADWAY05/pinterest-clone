@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: udpinterest-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: udpinterest
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend-core/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.sql
+  redis:
+    image: redis:8.4-alpine
+    container_name: udpinterest-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+volumes:
+  pgdata:
+  redisdata:
