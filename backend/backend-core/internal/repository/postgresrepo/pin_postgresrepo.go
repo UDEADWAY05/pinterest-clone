@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"pinterest-core/internal/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,11 +63,32 @@ func (r *PinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, 
 	return &pin, nil
 }
 
+func (r *PinRepository) GetPinByIDs(ctx context.Context, ids []int64) ([]domain.Pin, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.Pool.Query(ctx, `
+		SELECT id, title, description, image_url,
+		       dominant_color, height, width, author_id, created_at
+		FROM pins
+		WHERE id = ANY($1)
+		ORDER BY created_at DESC`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get pins by ids: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPins(rows)
+}
+
 func (r *PinRepository) CreatePin(ctx context.Context, pin *domain.Pin) error {
 	err := r.Pool.QueryRow(ctx, `
 		INSERT INTO pins (title, description, image_url, dominant_color, author_id, width, height)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, created_at;`, // <-- Опечатка исправлена здесь
+		RETURNING id, created_at;`,
 		pin.Title, pin.Description, pin.ImageURL, pin.DominantColor, pin.AuthorId, pin.Width, pin.Height,
 	).Scan(&pin.ID, &pin.CreatedAt)
 
@@ -74,4 +96,175 @@ func (r *PinRepository) CreatePin(ctx context.Context, pin *domain.Pin) error {
 		return fmt.Errorf("create pin: %w", err)
 	}
 	return nil
+}
+
+func (r *PinRepository) FindTrending(ctx context.Context, limit int) ([]domain.Pin, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.id, p.title, p.description, p.image_url,
+		       p.dominant_color, p.height, p.width, p.author_id, p.created_at
+		FROM pins p
+		LEFT JOIN interactions i ON i.pin_id = p.id
+			AND i.event_type IN ('save', 'click', 'open_pin')
+		GROUP BY p.id
+		ORDER BY COUNT(i.id) DESC, p.created_at DESC
+		LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query trending: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPins(rows)
+}
+
+func (r *PinRepository) FindRelated(ctx context.Context, pinID int64, limit int) ([]domain.Pin, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.id, p.title, p.description, p.image_url,
+		       p.dominant_color, p.height, p.width, p.author_id, p.created_at
+		FROM pins p
+		WHERE p.embedding IS NOT NULL
+		  AND p.id != $1
+		ORDER BY p.embedding <=> (SELECT embedding FROM pins WHERE id = $1)
+		LIMIT $2`,
+		pinID, limit,
+	)
+
+	if err == nil {
+		defer rows.Close()
+		return scanPins(rows)
+	}
+
+	return r.findRecentExcept(ctx, pinID, limit)
+}
+
+func (r *PinRepository) findRecentExcept(ctx context.Context, exceptID int64, limit int) ([]domain.Pin, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT id, title, description, image_url,
+		       dominant_color, height, width, author_id, created_at
+		FROM pins
+		WHERE id != $1
+		ORDER BY created_at DESC
+		LIMIT $2`,
+		exceptID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recent pins (fallback): %w", err)
+	}
+	defer rows.Close()
+
+	return scanPins(rows)
+}
+
+func (r *PinRepository) SaveTags(ctx context.Context, pinID int64, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	copyFrom := make([][]interface{}, len(tags))
+	for i, tag := range tags {
+		copyFrom[i] = []interface{}{pinID, tag}
+	}
+
+	_, err := r.Pool.CopyFrom(
+		ctx,
+		[]string{"pin_tags"},
+		[]string{"pin_id", "tag"},
+		pgx.CopyFromRows(copyFrom),
+	)
+	if err != nil {
+		return fmt.Errorf("save tags for pin %d: %w", pinID, err)
+	}
+	return nil
+}
+
+func (r *PinRepository) LoadTags(ctx context.Context, pinID int64) ([]string, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT tag FROM pin_tags WHERE pin_id = $1 ORDER BY tag`, pinID)
+	if err != nil {
+		return nil, fmt.Errorf("load tags for pin %d: %w", pinID, err)
+	}
+	defer rows.Close()
+
+	var tags []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, tag)
+	}
+	return tags, nil
+}
+
+func (r *PinRepository) LoadTagsForPins(ctx context.Context, pinIDs []int64) (map[int64][]string, error) {
+	if len(pinIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.Pool.Query(ctx, `
+		SELECT pin_id, tag FROM pin_tags
+		WHERE pin_id = ANY($1)
+		ORDER BY pin_id, tag`, pinIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load tags for pins: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int64][]string)
+	for rows.Next() {
+		var pinID int64
+		var tag string
+		if err := rows.Scan(&pinID, &tag); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		result[pinID] = append(result[pinID], tag)
+	}
+	return result, nil
+}
+
+func (r *PinRepository) FindExploration(ctx context.Context, sessionID string, limit int) ([]domain.Pin, error) {
+	query := `
+		SELECT id, title, description, image_url,
+		       dominant_color, height, width, author_id, created_at
+		FROM pins`
+
+	if sessionID != "" {
+		query += `
+		WHERE id NOT IN (
+			SELECT pin_id FROM interactions WHERE session_id = $1
+		)`
+	}
+
+	query += `
+	ORDER BY RANDOM()
+	LIMIT $2`
+
+	var rows pgx.Rows
+	var err error
+	if sessionID != "" {
+		rows, err = r.Pool.Query(ctx, query, sessionID, limit)
+	} else {
+		rows, err = r.Pool.Query(ctx, query, limit)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("query exploration: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPins(rows)
+}
+
+func scanPins(rows pgx.Rows) ([]domain.Pin, error) {
+	var pins []domain.Pin
+	for rows.Next() {
+		var pin domain.Pin
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL,
+			&pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan pin: %w", err)
+		}
+		pins = append(pins, pin)
+	}
+	return pins, nil
 }

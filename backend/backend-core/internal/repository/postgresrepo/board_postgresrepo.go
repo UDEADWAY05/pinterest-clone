@@ -1,0 +1,124 @@
+package postgresrepo
+
+import (
+	"context"
+	"fmt"
+	"pinterest-core/internal/domain"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type BoardRepository struct {
+	Pool *pgxpool.Pool
+}
+
+func NewBoardRepository(pool *pgxpool.Pool) *BoardRepository {
+	return &BoardRepository{Pool: pool}
+}
+
+func (r *BoardRepository) CreateBoard(ctx context.Context, board *domain.Board) error {
+	err := r.Pool.QueryRow(ctx, `
+		INSERT INTO boards (owner_id, title, is_private)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at`,
+		board.OwnerID, board.Title, board.IsPrivate,
+	).Scan(&board.ID, &board.CreatedAt)
+
+	if err != nil {
+		return fmt.Errorf("create board: %w", err)
+	}
+	return nil
+}
+
+func (r *BoardRepository) ListUserBoards(ctx context.Context, userID int64) ([]domain.Board, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT id, owner_id, title, is_private, created_at
+		FROM boards
+		WHERE owner_id = $1
+		ORDER BY created_at DESC`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list user boards: %w", err)
+	}
+	defer rows.Close()
+
+	var boards []domain.Board
+	for rows.Next() {
+		var b domain.Board
+		if err := rows.Scan(&b.ID, &b.OwnerID, &b.Title, &b.IsPrivate, &b.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan board: %w", err)
+		}
+		boards = append(boards, b)
+	}
+	return boards, nil
+}
+
+func (r *BoardRepository) GetBoardByID(ctx context.Context, boardID int64) (*domain.Board, error) {
+	var b domain.Board
+	err := r.Pool.QueryRow(ctx, `
+		SELECT id, owner_id, title, is_private, created_at
+		FROM boards WHERE id = $1`,
+		boardID,
+	).Scan(&b.ID, &b.OwnerID, &b.Title, &b.IsPrivate, &b.CreatedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("get board by id: %w", err)
+	}
+	return &b, nil
+}
+
+
+func (r *BoardRepository) SavePinToBoard(ctx context.Context, boardID, pinID int64) (*domain.BoardPin, error) {
+	var bp domain.BoardPin
+	err := r.Pool.QueryRow(ctx, `
+		INSERT INTO board_pins (board_id, pin_id)
+		VALUES ($1, $2)
+		RETURNING board_id, pin_id, saved_at`,
+		boardID, pinID,
+	).Scan(&bp.BoardID, &bp.PinID, &bp.SavedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("save pin to board: %w", err)
+	}
+	return &bp, nil
+}
+
+func (r *BoardRepository) RemovePinFromBoard(ctx context.Context, boardID, pinID int64) error {
+	_, err := r.Pool.Exec(ctx, `
+		DELETE FROM board_pins
+		WHERE board_id = $1 AND pin_id = $2`,
+		boardID, pinID,
+	)
+	if err != nil {
+		return fmt.Errorf("remove pin from board: %w", err)
+	}
+	return nil
+}
+
+func (r *BoardRepository) GetBoardPins(ctx context.Context, boardID int64) ([]domain.Pin, error) {
+	rows, err := r.Pool.Query(ctx, `
+		SELECT p.id, p.title, p.description, p.image_url,
+		       p.dominant_color, p.height, p.width, p.author_id, p.created_at
+		FROM pins p
+		JOIN board_pins bp ON p.id = bp.pin_id
+		WHERE bp.board_id = $1
+		ORDER BY bp.saved_at DESC`,
+		boardID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get board pins: %w", err)
+	}
+	defer rows.Close()
+
+	var pins []domain.Pin
+	for rows.Next() {
+		var pin domain.Pin
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL,
+			&pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan board pin: %w", err)
+		}
+		pins = append(pins, pin)
+	}
+	return pins, nil
+}

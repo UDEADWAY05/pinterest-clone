@@ -101,7 +101,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) erro
 	err := r.Pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, display_name, avatar_url)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, EXTRACT(EPOCH FROM created_at)::BIGINT;`,
+		RETURNING id, created_at`,
 		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL,
 	).Scan(&user.ID, &user.CreatedAt)
 

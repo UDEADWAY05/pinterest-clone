@@ -20,7 +20,6 @@ func (r *SessionRepository) CreateSession(ctx context.Context, tokenHash string,
 	key := fmt.Sprintf("session:%s", tokenHash)
 	ttl := time.Until(expiresAt)
 
-	// Храним userID. Redis автоматически удалит ключ по истечении ttl.
 	err := r.client.Set(ctx, key, userID, ttl).Err()
 	if err != nil {
 		return fmt.Errorf("redis create session: %w", err)

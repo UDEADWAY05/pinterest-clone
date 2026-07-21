@@ -10,11 +10,27 @@ interface PinFeedProps {
 }
 
 export const PinFeed = ({ initialPins }: PinFeedProps) => {
-  // Передаем initialPins в наш хук.
-  // Теперь isLoading ВСЕГДА будет false при первой загрузке!
-  const { data: pins, isError } = usePins(initialPins);
+  const { data: pins, isError, isLoading } = usePins(initialPins);
 
-  if (isError) {
+  // Жёсткая загрузка — когда нет ни initialData, ни кеша (без SSR)
+  if (isLoading) {
+    const getHeightFromIndex = (index: number) => {
+      return ((index * 357) % 200) + 150;
+    };
+    return (
+      <div className="columns-2 md:columns-3 lg:columns-4 xl:columns-5 gap-4 max-w-400 mx-auto p-4">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div
+            key={i}
+            className="break-inside-avoid mb-4 rounded-2xl bg-gray-200 animate-pulse"
+            style={{ height: getHeightFromIndex(i) }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (isError && (!pins || pins.length === 0)) {
     return <div className="p-10 text-center text-red-500">Ошибка загрузки данных :(</div>;
   }
 
