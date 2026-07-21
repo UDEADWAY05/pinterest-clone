@@ -2,14 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"pinterest-core/internal/transport/http/render"
 	"pinterest-core/internal/usecase"
 	"strconv"
 )
 
 type PinHandler struct {
-	UC *usecase.PinUsecase
+	UC     *usecase.PinUsecase
 	AuthUC *usecase.AuthUsecase
 }
 
@@ -20,37 +20,35 @@ func NewPinHandler(uc *usecase.PinUsecase, authuc *usecase.AuthUsecase) *PinHand
 func (h *PinHandler) ListPins(w http.ResponseWriter, r *http.Request) {
 	pins, err := h.UC.List(r.Context())
 	if err != nil {
-		 http.Error(w, "failed to load pins", http.StatusInternalServerError)
-			return
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", err.Error())
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(pins)
+	// Используем render.JSON вместо ручного кодирования
+	render.JSON(w, http.StatusOK, pins)
 }
 
 func (h *PinHandler) GetPinByID(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "id is required", http.StatusBadRequest)
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "id is required", "")
 		return
 	}
 
 	idInt, idIntErr := strconv.ParseInt(id, 10, 64)
-
 	if idIntErr != nil {
-	 http.Error(w, "id is not valid", http.StatusBadRequest)
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "id is not valid", idIntErr.Error())
 		return
 	}
 
 	pin, err := h.UC.GetByID(r.Context(), idInt)
-
 	if err != nil {
-		 http.Error(w, "failed to get pin", http.StatusInternalServerError)
-			return
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get pin", err.Error())
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(pin)
+	// Данные будут красиво обернуты в {"data": {...}}
+	render.JSON(w, http.StatusOK, pin)
 }
 
 type CreatePinRequest struct {
@@ -64,36 +62,30 @@ type CreatePinRequest struct {
 
 func (h *PinHandler) CreatePin(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session")
-
 	if err != nil {
-		http.Error(w, "unauthorized: missing session token", http.StatusUnauthorized) // 401
+		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing session token", err.Error())
 		return
 	}
 
 	var req CreatePinRequest
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON", err.Error())
 		return
 	}
 
 	user, err := h.AuthUC.Current(r.Context(), cookie.Value)
-
 	if err != nil {
-		http.Error(w, "unauthorized: invalid or expired session", http.StatusUnauthorized) // 401
+		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired session", err.Error())
 		return
 	}
 
 	authorID := user.ID
 
 	pin, err := h.UC.Create(r.Context(), req.Title, req.Description, req.DominantColor, req.ImageURL, req.Width, req.Height, authorID)
-
 	if err != nil {
-		fmt.Print(err)
-		http.Error(w, "Invalid data", http.StatusBadRequest)
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid data", err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(pin)
+	render.JSON(w, http.StatusCreated, pin)
 }

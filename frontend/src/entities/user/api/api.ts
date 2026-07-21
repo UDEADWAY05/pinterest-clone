@@ -1,23 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
 import { User } from '../model/types';
-
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
+const baseUrl = typeof window === 'undefined' ? BACKEND_URL : '';
 
 export const fetchCurrentUser = async (cookieHeader?: string): Promise<User | null> => {
   const headers: Record<string, string> = {};
 
-  // Если вызов на сервере — прокидываем переданный заголовок
   if (cookieHeader) {
     headers['cookie'] = cookieHeader;
   }
 
-  const res = await fetch(`${typeof window === 'undefined' ? BACKEND_URL : ''}/api/user/current`, {
-    // cache: 'no-store',
-    // credentials важен для клиента (если запросы идут на тот же домен или настроен CORS)
+  const res = await fetch(`${baseUrl}/api/user/current`, {
     credentials: 'include',
     headers,
   });
 
+  // 401 — пользователь не авторизован, это не ошибка
   if (res.status === 401) {
     return null;
   }
@@ -25,8 +23,8 @@ export const fetchCurrentUser = async (cookieHeader?: string): Promise<User | nu
   if (!res.ok) {
     throw new Error('Network response was not ok');
   }
-  const data = (await res.json()) as User;
-  return data;
+
+  return await res.json();
 };
 
 export const useCurrentUser = (initialData: User | null) => {

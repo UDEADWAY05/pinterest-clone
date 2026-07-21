@@ -1,1 +1,1 @@
-export { PinPage } from './ui/page';
+export { default as PinPage } from './ui/page';

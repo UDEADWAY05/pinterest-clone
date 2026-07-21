@@ -12,11 +12,13 @@ func NewRouter(pinHandler *handlers.PinHandler, authHandler *handlers.AuthHandle
 	mux.HandleFunc("/health", handlers.Health)
 	mux.HandleFunc("/api/pins", pinHandler.ListPins)
 	mux.HandleFunc("/api/pins/{id}", pinHandler.GetPinByID)
-	mux.HandleFunc("/api/pins/create", pinHandler.CreatePin)
+	// protected route
+	authMw := middleware.AuthMiddleware(authHandler.UC)
+	mux.HandleFunc("/api/pins/create", authMw(pinHandler.CreatePin))
 	mux.HandleFunc("/api/auth/register", authHandler.Register)
 	mux.HandleFunc("/api/auth/login", authHandler.Login)
 	mux.HandleFunc("/api/users", userHandler.ListUsers)
-	mux.HandleFunc("/api/auth/logout", authHandler.Logout)
-	mux.HandleFunc("/api/user/current", authHandler.Current)
+	mux.HandleFunc("/api/auth/logout", authMw(authHandler.Logout))
+	mux.HandleFunc("/api/user/current", authMw(authHandler.Current))
 	return middleware.CorsMiddleware(mux)
 }

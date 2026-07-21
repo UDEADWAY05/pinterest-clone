@@ -68,7 +68,7 @@ export async function login(prevState: AuthState, formData: FormData): Promise<A
     }
 
     return { success: true };
-  } catch (error) {
+  } catch {
     return { message: 'Ошибка соединения с сервером' };
   }
 }

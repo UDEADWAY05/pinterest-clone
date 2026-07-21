@@ -1,0 +1,105 @@
+specification {
+    element actor
+    element system
+    element component 
+}
+
+model {
+    customer = actor "User" {
+        description "A user of our Pinterest application"
+    }
+
+    saas = system "UDW Pinterest Platform" {
+        
+        // --- FRONTEND LAYER ---
+        ui = component "Frontend" {
+            description "Next.js SPA application on App Router, optimized for media content."
+            style {
+                icon tech:nextjs
+                shape browser
+            }
+        }
+
+        // --- BACKEND LAYER ---
+        backend = component "Backend Service" {
+            description "Handles business logic, auth, and data coordination. Built with Go."
+            technology "REST API, Go, Chi/Echo"
+            style {
+                icon tech:go
+            }
+        }
+
+        // --- ASYNC PIPELINE LAYER ---
+        broker = component "Message Broker" {
+            description "Manages AMQP exchanges and queues for reliable asynchronous image processing."
+            technology "RabbitMQ"
+            style {
+                shape queue
+            }
+        }
+
+        mlWorker = component "ML Vector Worker" {
+            description "Processes images asynchronously, extracts embeddings using CLIP model."
+            technology "Python, FastAPI, PyTorch"
+            style {
+                icon tech:python
+            }
+        }
+
+        // --- STORAGE & DATABASE LAYER ---
+        storage = component "Object Storage" {
+            description "S3-compatible storage for raw and optimized images."
+            technology "MinIO / AWS S3"
+            style {
+                shape cylinder
+            }
+        }
+
+        cacheStorage = component "Cache Storage" {
+            description "Stores temporary sessions, rate-limiting states, and hot metadata."
+            technology "Redis"
+            style {
+                icon tech:redis
+                shape cylinder
+            }
+        }
+
+        database = component "Relational & Vector Database" {
+            description "Stores structured metadata and high-dimensional vector embeddings (KNN similarity search via pgvector)."
+            technology "PostgreSQL + pgvector"
+            style {
+                icon tech:postgresql
+                shape cylinder
+            }
+        }
+
+        // --- RELATIONSHIPS ---
+        customer -> ui "Interacts with UI using browser"
+        
+        ui -> backend "Sends REST requests and establishes WebSockets to"
+        
+        backend -> database "Reads/Writes application state & queries vector embeddings"
+        backend -> cacheStorage "Caches hot data and checks limits in"
+        backend -> storage "Uploads raw image files to"
+        backend -> broker "Publishes 'image.uploaded' events to Exchange"
+
+        broker -> mlWorker "Delivers tasks via AMQP queue to"
+        mlWorker -> storage "Downloads images for processing from"
+        mlWorker -> database "Saves generated vector embeddings into"
+    }
+}
+
+views {
+    view index {
+        title "Production SaaS Application Architecture"
+        include *
+    }
+
+    view of saas {
+        title "Internal Component Architecture & Data Pipeline"
+        include *
+        style customer {
+            color muted
+        }
+    }
+}

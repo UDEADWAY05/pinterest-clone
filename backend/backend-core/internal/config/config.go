@@ -25,6 +25,11 @@ type Config struct {
 	RedisAddr  string
 	S3Endpoint string
 	S3Bucket   string
+
+	// Cache TTL settings (in seconds)
+	CachePinTTL  int // TTL для одного пина (по умолчанию 300 = 5 мин)
+	CacheListTTL int // TTL для списков/лент (по умолчанию 60 = 1 мин)
+	CacheUserTTL int // TTL для профиля пользователя (по умолчанию 600 = 10 мин)
 }
 
 func Load() (*Config, error) {
@@ -39,6 +44,9 @@ func Load() (*Config, error) {
 		RedisAddr:          getEnv("REDIS_ADDR", ""),
 		S3Endpoint:         getEnv("S3_ENDPOINT", ""),
 		S3Bucket:           getEnv("S3_BUCKET", ""),
+		CachePinTTL:        getEnvInt("CACHE_PIN_TTL", 300),
+		CacheListTTL:       getEnvInt("CACHE_LIST_TTL", 60),
+		CacheUserTTL:       getEnvInt("CACHE_USER_TTL", 600),
 	}
 
 	if c.PostgresDSN == "" {
@@ -51,6 +59,12 @@ func Load() (*Config, error) {
 func (c *Config) PostgresTimeout() time.Duration {
 	return time.Duration(c.PostgresTimeoutSec) * time.Second
 }
+
+// CacheTTLs возвращает TTL для разных типов кешируемых данных.
+// Вынесено в методы, чтобы не дублировать time.Duration в месте использования.
+func (c *Config) PinCacheTTL() time.Duration   { return time.Duration(c.CachePinTTL) * time.Second }
+func (c *Config) ListCacheTTL() time.Duration  { return time.Duration(c.CacheListTTL) * time.Second }
+func (c *Config) UserCacheTTL() time.Duration  { return time.Duration(c.CacheUserTTL) * time.Second }
 
 func getEnv(key, def string) string {
 	if v := os.Getenv(key); v != "" {

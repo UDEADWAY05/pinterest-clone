@@ -1,15 +1,27 @@
 import { fetchPins } from '@/entities/pin';
+import type { Pin } from '@/entities/pin/model/types';
 import { PinFeed } from '@/widgets/pin-feed/ui/PinFeed';
+import type { Metadata } from 'next';
 
-// Это компонент-сборщик. Здесь мы будем собирать Хедер, Ленту и Модалки.
+// ── Метаданные ─────────────────────────────────────────────────
+
+export const metadata: Metadata = {
+  title: 'UDPinterest — главная',
+  description: 'Лента пинов, вдохновение и идеи',
+};
+
+// ── Страница ───────────────────────────────────────────────────
+
 export const HomeView = async () => {
-  const initialPins = await fetchPins();
+  let initialPins: Pin[] | undefined;
+  try {
+    initialPins = await fetchPins();
+  } catch {
+    initialPins = [];
+  }
 
   return (
     <main className="min-h-screen pb-10">
-      {/* Здесь позже появится <Header /> */}
-
-      {/* Оборачиваем ленту в контейнер */}
       <div className="container mx-auto px-4">
         <PinFeed initialPins={initialPins} />
       </div>
