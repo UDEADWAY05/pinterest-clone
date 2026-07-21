@@ -10,15 +10,6 @@ import (
 	"pinterest-core/internal/domain"
 )
 
-// CachedUserRepository — кеширующий декоратор для UserRepository.
-//
-// Профили пользователей — идеальные кандидаты для кеширования:
-//   - Читаются часто (каждый просмотр пина тянет автора; /api/user/current).
-//   - Меняются редко.
-//   - Маленькие по размеру (один объект ~200 байт).
-//
-// Поэтому userTTL можно ставить большим (5–10 минут), что даёт
-// очень высокий hit rate (процент попаданий в кеш).
 type CachedUserRepository struct {
 	wrapped UserRepository
 	cache   CacheRepository
@@ -37,29 +28,16 @@ func NewCachedUserRepository(
 	}
 }
 
-// ── Ключи ───────────────────────────────────────────────────────────────
+func userByIDKey(id int64) string    {
+	return fmt.Sprintf("user:id:%d", id)
+}
+func userByEmailKey(email string) string {
+	return fmt.Sprintf("user:email:%s", email)
+}
+func userListKey() string {
+	return "user:list:all"
+}
 
-func userByIDKey(id int64) string    { return fmt.Sprintf("user:id:%d", id) }
-func userByEmailKey(email string) string { return fmt.Sprintf("user:email:%s", email) }
-func userListKey() string            { return "user:list:all" }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// СТРАТЕГИЯ: Двойной индекс в кеше
-//
-// Для пользователей мы кешируем ДВА ключа на один объект:
-//   - user:id:{ID}     — для GetUserByID
-//   - user:email:{email} — для GetUserByEmail
-//
-// Это trade-off:
-//   (+) Быстрый доступ по обоим полям (как индексы в БД, только в Redis).
-//   (−) Двойное использование памяти (но для пользователей это копейки).
-//   (−) При инвалидации нужно удалять оба ключа.
-//
-// Альтернатива: кешировать только по ID, а GetUserByEmail всегда ходить в БД.
-// Но поскольку GetUserByEmail вызывается при КАЖДОМ логине, кеширование окупается.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// GetUserByID — кешированный запрос пользователя по ID.
 func (r *CachedUserRepository) GetUserByID(ctx context.Context, id int64) (*domain.User, error) {
 	key := userByIDKey(id)
 
@@ -84,7 +62,6 @@ func (r *CachedUserRepository) GetUserByID(ctx context.Context, id int64) (*doma
 	return user, nil
 }
 
-// GetUserByEmail — кешированный запрос пользователя по email.
 func (r *CachedUserRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	key := userByEmailKey(email)
 
@@ -106,15 +83,11 @@ func (r *CachedUserRepository) GetUserByEmail(ctx context.Context, email string)
 	}
 
 	r.cacheSet(ctx, key, user)
-
-	// Дополнительно кешируем по ID — чтобы GetUserByID тоже попал в кеш.
-	// Это разумно: мы уже достали юзера из БД, давай сохраним и по ID.
 	r.cacheSet(ctx, userByIDKey(user.ID), user)
 
 	return user, nil
 }
 
-// ListUsers — кешированный список пользователей.
 func (r *CachedUserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	key := userListKey()
 
@@ -139,13 +112,11 @@ func (r *CachedUserRepository) ListUsers(ctx context.Context) ([]domain.User, er
 	return users, nil
 }
 
-// CreateUser — создание пользователя с инвалидацией списка.
 func (r *CachedUserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	if err := r.wrapped.CreateUser(ctx, user); err != nil {
 		return err
 	}
 
-	// Инвалидируем список — новый пользователь должен появиться.
 	if err := r.cache.Delete(ctx, userListKey()); err != nil {
 		log.Printf("cache invalidate user list failed: %v", err)
 	}

@@ -15,25 +15,22 @@ type Redis struct {
 }
 
 func New(ctx context.Context, cfg *config.Config) (*Redis, error) {
-	// 1. Настройка параметров подключения (Connection Pool)
 	opts := &goredis.Options{
 		Addr:         cfg.RedisAddr,
-		PoolSize:     100,             // Максимальное количество соединений
-		MinIdleConns: 10,              // Минимальное количество "спящих" соединений
-		DialTimeout:  5 * time.Second, // Таймаут на установку соединения
-		ReadTimeout:  3 * time.Second, // Таймаут на чтение
-		WriteTimeout: 3 * time.Second, // Таймаут на запись
+		PoolSize:     100,
+		MinIdleConns: 10,
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
 	}
 
-	// 2. Инициализация клиента
 	client := goredis.NewClient(opts)
 
-	// 3. Проверка доступности (Fail Fast)
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := client.Ping(pingCtx).Err(); err != nil {
-		client.Close() // Обязательно закрываем клиент, если пинг не прошел
+		client.Close()
 		return nil, fmt.Errorf("ping redis: %w", err)
 	}
 
@@ -45,6 +42,5 @@ func (r *Redis) Close(context.Context) error {
 		return nil
 	}
 
-	// Закрываем все соединения в пуле
 	return r.Client.Close()
 }

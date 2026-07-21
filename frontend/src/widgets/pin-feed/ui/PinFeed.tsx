@@ -30,7 +30,6 @@ export const PinFeed = ({ initialPins }: PinFeedProps) => {
     );
   }
 
-  // Ошибка — но только если нет данных для показа (initialData всё ещё валиден)
   if (isError && (!pins || pins.length === 0)) {
     return <div className="p-10 text-center text-red-500">Ошибка загрузки данных :(</div>;
   }

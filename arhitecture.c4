@@ -35,6 +35,7 @@ model {
             technology "RabbitMQ"
             style {
                 shape queue
+                icon: tech:rabbitmq
             }
         }
 

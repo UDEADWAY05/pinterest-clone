@@ -52,12 +52,13 @@ func (h *PinHandler) GetPinByID(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreatePinRequest struct {
-	Title         string `json:"title"`
-	Description   string `json:"description"`
-	ImageURL      string `json:"image_url"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	DominantColor string `json:"dominant_color"`
+	Title         string   `json:"title"`
+	Description   string   `json:"description"`
+	ImageURL      string   `json:"image_url"`
+	Width         int      `json:"width"`
+	Height        int      `json:"height"`
+	DominantColor string   `json:"dominant_color"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 func (h *PinHandler) CreatePin(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func (h *PinHandler) CreatePin(w http.ResponseWriter, r *http.Request) {
 
 	authorID := user.ID
 
-	pin, err := h.UC.Create(r.Context(), req.Title, req.Description, req.DominantColor, req.ImageURL, req.Width, req.Height, authorID)
+	pin, err := h.UC.Create(r.Context(), req.Title, req.Description, req.DominantColor, req.ImageURL, req.Width, req.Height, authorID, req.Tags)
 	if err != nil {
 		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid data", err.Error())
 		return
