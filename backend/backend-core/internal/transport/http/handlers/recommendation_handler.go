@@ -18,8 +18,15 @@ func NewRecommendationHandler(uc *usecase.RecommendationUsecase, authUC *usecase
 	return &RecommendationHandler{UC: uc, AuthUC: authUC}
 }
 
-// ── GET /api/recommendations — персонализированная лента ────────────
-
+// GetFeed возвращает персонализированную ленту.
+// @Summary      Рекомендации
+// @Description  Возвращает персонализированную ленту пинов с пагинацией. Если пользователь авторизован — лента строится на основе его взаимодействий.
+// @Tags         recommendations
+// @Produce      json
+// @Param        limit   query  int  false  "Количество пинов (default 20)"
+// @Param        offset  query  int  false  "Смещение (default 0)"
+// @Success      200  {object}  render.JSONResponse{data=[]domain.Pin}
+// @Router       /api/recommendations [get]
 func (h *RecommendationHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -30,7 +37,6 @@ func (h *RecommendationHandler) GetFeed(w http.ResponseWriter, r *http.Request) 
 	offset := getQueryInt(r, "offset", 0)
 	sessionID := r.URL.Query().Get("session_id")
 
-	// Пробуем достать пользователя из сессии (необязательно)
 	var userID int64
 	cookie, err := r.Cookie("session")
 	if err == nil && cookie.Value != "" {
@@ -38,7 +44,6 @@ func (h *RecommendationHandler) GetFeed(w http.ResponseWriter, r *http.Request) 
 		if err == nil {
 			userID = user.ID
 		}
-		// Если есть session cookie — используем её хеш как sessionID
 		if sessionID == "" {
 			sessionID = cookie.Value
 		}
@@ -53,8 +58,15 @@ func (h *RecommendationHandler) GetFeed(w http.ResponseWriter, r *http.Request) 
 	render.JSON(w, http.StatusOK, pins)
 }
 
-// ── GET /api/pins/{id}/related — похожие на пин ─────────────────────
-
+// GetRelated возвращает похожие на указанный пин.
+// @Summary      Похожие пины
+// @Description  Возвращает пины, похожие на указанный (по embedding или тегам)
+// @Tags         recommendations
+// @Produce      json
+// @Param        id     path  int  true  "ID пина"
+// @Param        limit  query  int  false  "Количество (default 10)"
+// @Success      200  {object}  render.JSONResponse{data=[]domain.Pin}
+// @Router       /api/pins/{id}/related [get]
 func (h *RecommendationHandler) GetRelated(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -77,8 +89,6 @@ func (h *RecommendationHandler) GetRelated(w http.ResponseWriter, r *http.Reques
 
 	render.JSON(w, http.StatusOK, pins)
 }
-
-// ── Helper ───────────────────────────────────────────────────────────
 
 func getQueryInt(r *http.Request, name string, def int) int {
 	val := r.URL.Query().Get(name)

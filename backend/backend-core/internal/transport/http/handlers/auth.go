@@ -3,12 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
-	"time"
-
 	"pinterest-core/internal/domain"
 	"pinterest-core/internal/transport/http/render"
 	"pinterest-core/internal/usecase"
+	"time"
 )
 
 const sessionCookieName = "session"
@@ -41,6 +41,27 @@ type authRequest struct {
     AvatarURL   string `json:"avatar_url"`
 }
 
+
+// @Summary     Register a new user
+// @Description Register a new user with the provided credentials
+// @Tags        auth
+// @Accept      json
+// @Produce     json
+// @Param       user body authRequest true "User registration details"
+// @Success     201 {object} authResponse "User registered successfully"
+// @Failure     400 {object} errorResponse "Invalid JSON"
+// @Failure     500 {object} errorResponse "Internal server error"
+
+// Register регистрирует нового пользователя.
+// @Summary      Регистрация
+// @Description  Создаёт нового пользователя и возвращает session cookie
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      authRequest  true  "Данные для регистрации"
+// @Success      201  {object}  authUserResponse
+// @Failure      400  {object}  render.ErrorResponse
+// @Router       /api/auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
@@ -63,6 +84,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
     writeAuthUser(w, user, http.StatusCreated)
 }
 
+// Login аутентифицирует пользователя.
+// @Summary      Вход
+// @Description  Аутентификация по email и паролю, возвращает session cookie
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      authRequest  true  "Email и пароль"
+// @Success      200  {object}  authUserResponse
+// @Failure      401  {object}  render.ErrorResponse
+// @Router       /api/auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
@@ -85,6 +116,13 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
     writeAuthUser(w, user, http.StatusOK)
 }
 
+// Logout завершает сессию пользователя.
+// @Summary      Выход
+// @Description  Удаляет session cookie и завершает сессию
+// @Tags         auth
+// @Success      204  "No Content"
+// @Security     SessionCookie
+// @Router       /api/auth/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodPost {
         w.WriteHeader(http.StatusMethodNotAllowed)
@@ -100,23 +138,36 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusNoContent)
 }
 
+// Current возвращает информацию о текущем авторизованном пользователе.
+// @Summary      Текущий пользователь
+// @Description  Возвращает профиль пользователя по session cookie
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  authUserResponse
+// @Failure      401  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/user/current [get]
 func (h *AuthHandler) Current(w http.ResponseWriter, r *http.Request) {
     if r.Method != http.MethodGet {
         w.WriteHeader(http.StatusMethodNotAllowed)
         return
     }
 
+
     cookie, err := r.Cookie(sessionCookieName)
     if err != nil {
         render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized", "")
         return
     }
+    fmt.Println("Current user", cookie)
 
     user, err := h.UC.Current(r.Context(), cookie.Value)
     if err != nil {
         render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized", "")
         return
     }
+
+    fmt.Println(user)
 
     writeAuthUser(w, user, http.StatusOK)
 }

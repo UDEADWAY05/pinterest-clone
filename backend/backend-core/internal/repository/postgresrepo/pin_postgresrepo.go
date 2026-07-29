@@ -2,8 +2,11 @@ package postgresrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"pinterest-core/internal/domain"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,38 +16,80 @@ type PinRepository struct {
 	Pool *pgxpool.Pool
 }
 
-
-
 func NewPinRepository(pool *pgxpool.Pool) *PinRepository {
 	return &PinRepository{Pool: pool}
 }
 
 
-func (r *PinRepository) ListPins(ctx context.Context) ([]domain.Pin, error) {
-	rows, err := r.Pool.Query(ctx, "SELECT id, title, description, image_url, dominant_color, height, width, created_at FROM pins ORDER BY created_at DESC")
+
+func (r *PinRepository) ListPins(ctx context.Context, cursor *time.Time, limit int, userId *int64) (*domain.ListPinsResult, error) {
+	whereClause := " WHERE deleted_at IS NULL"
+	paramIdx := 1
+	args := []any{}
+
+	if userId != nil {
+		whereClause += fmt.Sprintf(" AND author_id = $%d", paramIdx)
+		args = append(args, *userId)
+		paramIdx++
+	}
+
+	if cursor != nil {
+		whereClause += fmt.Sprintf(" AND created_at < $%d", paramIdx)
+		args = append(args, cursor)
+		paramIdx++
+	}
+
+	query := `
+		SELECT
+			id, title, description, image_url, dominant_color, height, width, author_id, created_at
+		FROM pins` + whereClause + " ORDER BY created_at DESC"
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit + 1)
+		paramIdx++
+	}
+	rows, err := r.Pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query notes: %w", err)
+		return nil, fmt.Errorf("query pins: %w", err)
 	}
 	defer rows.Close()
 
 
-	var pins []domain.Pin
+	pins := make([]domain.Pin, 0)
 	for rows.Next() {
 		var pin domain.Pin
-		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL, &pin.DominantColor, &pin.Height, &pin.Width, &pin.CreatedAt); err != nil {
-			return nil,  fmt.Errorf("scan note: %w", err)
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL, &pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan note: %w", err)
 		}
 		pins = append(pins, pin)
 	}
-	return pins, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+		nextCursor = &c
+	} else {
+		nextCursor = nil
+	}
+
+
+	return &domain.ListPinsResult{
+		Data:       pins,
+		NextCursor: nextCursor,
+	}, nil
 }
 
 func (r *PinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, error) {
 	var pin domain.Pin
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, title, description, created_at, image_url, dominant_color, height, width
-		FROM pins WHERE id = $1`,
+		SELECT id, title, description, created_at, image_url, dominant_color, height, width, author_id
+		FROM pins WHERE id = $1 AND deleted_at IS NULL`,
 		id).Scan(
 		&pin.ID,
 		&pin.Title,
@@ -54,9 +99,13 @@ func (r *PinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, 
 		&pin.DominantColor,
 		&pin.Height,
 		&pin.Width,
+		&pin.AuthorId,
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("get pin by id: %w", domain.ErrNotFound)
+		}
 		return nil, fmt.Errorf("get pin by id: %w", err)
 	}
 
@@ -72,7 +121,7 @@ func (r *PinRepository) GetPinByIDs(ctx context.Context, ids []int64) ([]domain.
 		SELECT id, title, description, image_url,
 		       dominant_color, height, width, author_id, created_at
 		FROM pins
-		WHERE id = ANY($1)
+		WHERE id = ANY($1) AND deleted_at IS NULL
 		ORDER BY created_at DESC`,
 		ids,
 	)
@@ -96,6 +145,71 @@ func (r *PinRepository) CreatePin(ctx context.Context, pin *domain.Pin) error {
 		return fmt.Errorf("create pin: %w", err)
 	}
 	return nil
+}
+
+func (r *PinRepository) DeletePin(ctx context.Context, id int64, authorID int64) error {
+	_, err := r.Pool.Exec(ctx, `
+		UPDATE pins
+		SET deleted_at = NOW()
+		WHERE id = $1 AND author_id = $2 AND deleted_at IS NULL;`,
+		id, authorID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("delete pin: %w", err)
+	}
+	return nil
+}
+
+func (r *PinRepository) UpdatePin(ctx context.Context, id int64, author_id int64, pin *domain.UpdatePinParams) (*domain.Pin, error) {
+	setValues := make([]string, 0)
+	args := make([]any, 0)
+
+	argID := 1
+
+	if pin.Title != nil {
+		setValues = append(setValues, fmt.Sprintf("title = $%d", argID))
+		args = append(args, *pin.Title)
+		argID++
+	}
+
+	if pin.Description != nil {
+		setValues = append(setValues, fmt.Sprintf("description = $%d", argID))
+		args = append(args, *pin.Description)
+		argID++
+	}
+
+	if pin.ImageURL != nil {
+		setValues = append(setValues, fmt.Sprintf("image_url = $%d", argID))
+		args = append(args, *pin.ImageURL)
+		argID++
+	}
+
+	if len(setValues) == 0 {
+		return nil, fmt.Errorf("update pin: no fields to update")
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE pins
+		SET %s
+		WHERE id = $%d AND author_id = $%d AND deleted_at IS NULL
+		RETURNING id, title, description, image_url, dominant_color, height, width, author_id, created_at`,
+		strings.Join(setValues, ", "),
+		argID,
+		argID + 1,
+	)
+
+	args = append(args, id)
+	args = append(args, author_id)
+
+	var updatedPin domain.Pin
+
+	err := r.Pool.QueryRow(ctx, query, args...).Scan(&updatedPin.ID, &updatedPin.Title, &updatedPin.Description, &updatedPin.ImageURL,
+		&updatedPin.DominantColor, &updatedPin.Height, &updatedPin.Width, &updatedPin.AuthorId, &updatedPin.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("update pin: %w", err)
+	}
+	return &updatedPin, nil
 }
 
 func (r *PinRepository) FindTrending(ctx context.Context, limit int) ([]domain.Pin, error) {

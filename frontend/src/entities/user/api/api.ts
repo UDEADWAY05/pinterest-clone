@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { User } from '../model/types';
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
 const baseUrl = typeof window === 'undefined' ? BACKEND_URL : '';
 
@@ -13,24 +14,22 @@ export const fetchCurrentUser = async (cookieHeader?: string): Promise<User | nu
   const res = await fetch(`${baseUrl}/api/user/current`, {
     credentials: 'include',
     headers,
+    method: 'GET',
   });
 
   // 401 — пользователь не авторизован, это не ошибка
-  if (res.status === 401) {
-    return null;
-  }
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error('Failed to fetch current user');
 
-  if (!res.ok) {
-    throw new Error('Network response was not ok');
-  }
-
-  return await res.json();
+  const body: User = await res.json();
+  console.log(body);
+  return body;
 };
 
-export const useCurrentUser = (initialData: User | null) => {
+export const useCurrentUser = (initialData?: User | null, cookieHeader?: string) => {
   return useQuery({
     queryKey: ['user', 'currentUser'],
-    queryFn: () => fetchCurrentUser(),
-    initialData,
+    queryFn: () => fetchCurrentUser(cookieHeader),
+    initialData: initialData ?? undefined,
   });
 };

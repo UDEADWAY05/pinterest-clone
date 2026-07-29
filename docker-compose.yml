@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: udpinterest-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: udpinterest
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      # - ./backend-core/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.sql
+  redis:
+    image: redis:8.4-alpine
+    container_name: udpinterest-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000" # Порт для API (S3)
+      - "9001:9001" # Порт для веб-консоли
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: supersecretpassword123 # Обязательно замените на свой сложный пароль
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+volumes:
+  pgdata:
+  redisdata:
+  minio_data:

@@ -12,10 +12,6 @@ import (
 
 	"github.com/joho/godotenv"
 
-	migrate "github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-
 	"pinterest-core/internal/config"
 	"pinterest-core/internal/infra/db"
 	"pinterest-core/internal/infra/redis"
@@ -27,6 +23,10 @@ import (
 	httpserver "pinterest-core/internal/transport/http"
 	"pinterest-core/internal/transport/http/handlers"
 	"pinterest-core/internal/usecase"
+
+	migrate "github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
@@ -134,7 +134,7 @@ func main() {
 	}
 
 	// ── Handlers ────────────────────────────────────────────────────
-	pinHandler := handlers.NewPinHandler(pinUC, authUC)
+	pinHandler := handlers.NewPinHandler(pinUC)
 	authHandler := handlers.NewAuthHandler(authUC)
 	userHandlers := handlers.NewUserHandler(userUC)
 	boardHandler := handlers.NewBoardHandler(boardUC, authUC)

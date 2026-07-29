@@ -20,15 +20,22 @@ func NewBoardHandler(uc *usecase.BoardUsecase, authUC *usecase.AuthUsecase) *Boa
 	return &BoardHandler{UC: uc, AuthUC: authUC}
 }
 
-// ── DTO (Request/Response структуры) ─────────────────────────────────
-
 type createBoardRequest struct {
 	Title     string `json:"title"`
 	IsPrivate bool   `json:"is_private"`
 }
 
-// ── POST /api/boards — создать доску ─────────────────────────────────
-
+// CreateBoard создаёт новую доску.
+// @Summary      Создать доску
+// @Description  Создаёт новую доску для текущего пользователя
+// @Tags         boards
+// @Accept       json
+// @Produce      json
+// @Param        body  body      createBoardRequest  true  "Данные доски"
+// @Success      201  {object}  render.JSONResponse{data=domain.Board}
+// @Failure      400  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/boards [post]
 func (h *BoardHandler) CreateBoard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -56,8 +63,14 @@ func (h *BoardHandler) CreateBoard(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusCreated, board)
 }
 
-// ── GET /api/boards/me — мои доски ───────────────────────────────────
-
+// ListMyBoards возвращает доски текущего пользователя.
+// @Summary      Мои доски
+// @Description  Возвращает все доски текущего авторизованного пользователя
+// @Tags         boards
+// @Produce      json
+// @Success      200  {object}  render.JSONResponse{data=[]domain.Board}
+// @Security     SessionCookie
+// @Router       /api/boards/me [get]
 func (h *BoardHandler) ListMyBoards(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -79,14 +92,16 @@ func (h *BoardHandler) ListMyBoards(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusOK, boards)
 }
 
-// ── POST /api/boards/{boardId}/pins/{pinId} — сохранить пин ──────────
-
+// SavePinToBoard сохраняет пин в доску.
+// @Summary      Сохранить пин
+// @Description  Сохраняет пин в указанную доску (только для владельца доски)
+// @Tags         boards
+// @Produce      json
+// @Success      201  {object}  render.JSONResponse{data=domain.BoardPin}
+// @Failure      400  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/boards/{boardId}/pins/{pinId} [post]
 func (h *BoardHandler) SavePinToBoard(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	userID, err := h.getCurrentUserID(r)
 	if err != nil {
 		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), "")
@@ -114,14 +129,16 @@ func (h *BoardHandler) SavePinToBoard(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusCreated, bp)
 }
 
-// ── DELETE /api/boards/{boardId}/pins/{pinId} — удалить пин из доски ─
-
+// RemovePinFromBoard удаляет пин из доски.
+// @Summary      Удалить пин из доски
+// @Description  Удаляет пин из указанной доски (только для владельца доски)
+// @Tags         boards
+// @Produce      json
+// @Success      204  "No Content"
+// @Failure      400  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/boards/{boardId}/pins/{pinId} [delete]
 func (h *BoardHandler) RemovePinFromBoard(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
 	userID, err := h.getCurrentUserID(r)
 	if err != nil {
 		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), "")
@@ -148,13 +165,7 @@ func (h *BoardHandler) RemovePinFromBoard(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ── POST/DELETE /api/boards/{boardId}/pins/{pinId} ─────────────────
-//
-// Комбинированный handler: POST = сохранить, DELETE = удалить.
-// Это нужно потому, что http.ServeMux не умеет различать методы на одном пути.
-// В Go 1.22+ есть mux.HandleFunc("POST /path", ...), но для совместимости
-// с существующим стилем кода используем этот подход.
-
+// HandlePinInBoard — комбинированный handler: POST = сохранить, DELETE = удалить.
 func (h *BoardHandler) HandlePinInBoard(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -166,8 +177,14 @@ func (h *BoardHandler) HandlePinInBoard(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// ── GET /api/boards/{boardId}/pins — пины в доске ────────────────────
-
+// GetBoardPins возвращает пины в доске.
+// @Summary      Пины доски
+// @Description  Возвращает все пины, сохранённые в указанной доске
+// @Tags         boards
+// @Produce      json
+// @Param        boardId  path  int  true  "ID доски"
+// @Success      200  {object}  render.JSONResponse{data=[]domain.Pin}
+// @Router       /api/boards/{boardId}/pins [get]
 func (h *BoardHandler) GetBoardPins(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -189,10 +206,6 @@ func (h *BoardHandler) GetBoardPins(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusOK, pins)
 }
 
-// ── Helper — достаёт userID из сессии ─────────────────────────────────
-//
-// В существующем коде authUC.Current может использовать cookie "session".
-// Этот хелпер унифицирует получение текущего пользователя.
 func (h *BoardHandler) getCurrentUserID(r *http.Request) (int64, error) {
 	cookie, err := r.Cookie("session")
 	if err != nil {

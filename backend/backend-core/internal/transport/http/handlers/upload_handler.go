@@ -19,59 +19,44 @@ func NewUploadHandler(uc *usecase.UploadUsecase, authUC *usecase.AuthUsecase) *U
 	return &UploadHandler{UC: uc, AuthUC: authUC}
 }
 
-// ── POST /api/uploads/presign ────────────────────────────────────────
-//
-// Клиент присылает информацию о будущем файле, backend возвращает
-// presigned URL, по которому клиент загружает файл напрямую в S3.
-//
-// Request:
-//
-//	{
-//	  "file_name": "my_photo.jpg",
-//	  "content_type": "image/jpeg",
-//	  "file_size": 5242880
-//	}
-//
-// Response:
-//
-//	{
-//	  "upload_url": "https://...X-Amz-Signature=...",
-//	  "public_url": "http://localhost:9000/pinterest-images/uploads/1/abc...jpg",
-//	  "key": "uploads/1/abc...jpg",
-//	  "expires_in": 900
-//	}
+// PresignUpload генерирует presigned URL для загрузки изображения.
+// @Summary      Получить presigned URL
+// @Description  Генерирует временный URL для прямой загрузки файла в S3/MinIO. Файл не проходит через сервер.
+// @Tags         upload
+// @Accept       json
+// @Produce      json
+// @Param        body  body      usecase.UploadRequest  true  "Информация о файле"
+// @Success      200  {object}  usecase.UploadResult
+// @Failure      400  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/uploads/presign [post]
 func (h *UploadHandler) PresignUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	// ── Получаем пользователя из сессии ───────────────────────────
 	userID, err := h.getUploadUserID(r)
 	if err != nil {
 		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), "")
 		return
 	}
 
-	// ── Декодируем запрос ─────────────────────────────────────────
 	var req usecase.UploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "Invalid JSON", err.Error())
 		return
 	}
 
-	// ── Вызываем usecase ───────────────────────────────────────────
 	result, err := h.UC.PresignUpload(r.Context(), userID, req)
 	if err != nil {
 		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", err.Error(), "")
 		return
 	}
 
-	// ── Успех ─────────────────────────────────────────────────────
 	render.JSON(w, http.StatusOK, result)
 }
 
-// getUploadUserID — helper, извлекает userID из session cookie.
 func (h *UploadHandler) getUploadUserID(r *http.Request) (int64, error) {
 	cookie, err := r.Cookie("session")
 	if err != nil {

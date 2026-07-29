@@ -4,17 +4,10 @@ import type { ApiResponse } from '@/shared/types/response';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080';
 
-/**
- * Базовый URL: на сервере — прямой вызов Go-бэкенда,
- * на клиенте — относительный путь (проксируется Next.js rewrites на :8080).
- */
 const baseUrl = typeof window === 'undefined' ? BACKEND_URL : '';
 
-const REVALIDATE_SECONDS = 60; // серверный кеш на 60 секунд
+const REVALIDATE_SECONDS = 60;
 
-// ── Серверные fetch-функции ───────────────────────────────────
-
-/** Загружает ленту пинов (сервер или клиент). */
 export const fetchPins = async (): Promise<Pin[]> => {
   const res = await fetch(`${baseUrl}/api/pins`, {
     next: { revalidate: REVALIDATE_SECONDS },
@@ -24,7 +17,6 @@ export const fetchPins = async (): Promise<Pin[]> => {
   return body.data;
 };
 
-/** Загружает один пин по id (сервер или клиент). */
 export const fetchPin = async (id: string): Promise<Pin | null> => {
   const res = await fetch(`${baseUrl}/api/pins/${id}`, {
     next: { revalidate: REVALIDATE_SECONDS },
@@ -35,9 +27,7 @@ export const fetchPin = async (id: string): Promise<Pin | null> => {
   return body.data;
 };
 
-// ── Клиентский хук (React Query) ───────────────────────────────
-
-const STALE_TIME = 5 * 60 * 1000; // 5 минут — не рефетчить свежие данные
+const STALE_TIME = 5 * 60 * 1000;
 
 export const usePins = (initialData?: Pin[]) => {
   return useQuery({

@@ -10,12 +10,6 @@ import (
 )
 
 // InteractionHandler — POST /api/interactions.
-//
-// События приходят от frontend при каждом действии пользователя:
-// показ пина (impression), клик, сохранение и т.д.
-//
-// Эндпоинт не требует auth — события приходят и от анонимов.
-// Идентификация идёт по session_id (который frontend хранит в localStorage).
 type InteractionHandler struct {
 	UC *usecase.InteractionUsecase
 }
@@ -28,13 +22,19 @@ type interactionRequest struct {
 	EventType string                 `json:"event_type"`
 	PinID     int64                  `json:"pin_id"`
 	SessionID string                 `json:"session_id"`
-	UserID    *int64                 `json:"user_id,omitempty"` // опционально, если пользователь авторизован
-	TS        *time.Time             `json:"ts,omitempty"`      // опционально, сервер может проставить свою дату
-	Meta      map[string]interface{} `json:"meta,omitempty"`    // произвольные дополнительные данные
+	UserID    *int64                 `json:"user_id,omitempty"`
+	TS        *time.Time             `json:"ts,omitempty"`
+	Meta      map[string]interface{} `json:"meta,omitempty"`
 }
 
-// ── POST /api/interactions ──────────────────────────────────────────
-
+// Save сохраняет событие поведения пользователя.
+// @Summary      Отправить событие
+// @Description  Сохраняет событие поведения пользователя (показ, клик, сохранение и т.д.). Событие попадает в буфер и сбрасывается в БД пачкой.
+// @Tags         interactions
+// @Accept       json
+// @Success      202  "Accepted — событие принято в буфер"
+// @Failure      400  {object}  render.ErrorResponse
+// @Router       /api/interactions [post]
 func (h *InteractionHandler) Save(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -47,7 +47,6 @@ func (h *InteractionHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Если клиент не прислал ts — ставим время сервера
 	ts := time.Now().UTC()
 	if req.TS != nil {
 		ts = *req.TS
@@ -58,7 +57,5 @@ func (h *InteractionHandler) Save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 202 Accepted — событие принято, но может быть ещё не записано в БД
-	// (лежит в буфере и сбросится через пару секунд)
 	w.WriteHeader(http.StatusAccepted)
 }

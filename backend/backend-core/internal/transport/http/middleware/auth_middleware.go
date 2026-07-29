@@ -1,8 +1,8 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
-
 	"pinterest-core/internal/transport/http/render"
 	"pinterest-core/internal/usecase"
 )
@@ -18,11 +18,16 @@ func AuthMiddleware(authUC *usecase.AuthUsecase) func(http.HandlerFunc) http.Han
             }
 
             // Validate the session token; we don't need to use the returned user here.
-            _, err = authUC.Current(r.Context(), cookie.Value)
+            user, err := authUC.Current(r.Context(), cookie.Value)
             if err != nil {
                 render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid session", "")
                 return
             }
+
+            // Set the user in the context for use in the next handler.
+            ctx := r.Context()
+            ctx = context.WithValue(ctx, "user", user)
+            r = r.WithContext(ctx)
 
             next.ServeHTTP(w, r)
         })

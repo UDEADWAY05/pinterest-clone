@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"pinterest-core/internal/domain"
 	repository "pinterest-core/internal/repository"
@@ -17,15 +18,15 @@ func NewPinUsecase(repo repository.PinRepository) *PinUsecase {
 	return &PinUsecase{Repo: repo}
 }
 
-func (u *PinUsecase) List(ctx context.Context) ([]domain.Pin, error) {
-	return u.Repo.ListPins(ctx)
+func (u *PinUsecase) List(ctx context.Context, cursor *time.Time, limit int, userId *int64) (*domain.ListPinsResult, error) {
+	return u.Repo.ListPins(ctx, cursor, limit, userId)
 }
 
 func (u *PinUsecase) GetByID(ctx context.Context, id int64) (*domain.Pin, error) {
 	return u.Repo.GetPinByID(ctx, id)
 }
 
-func (u *PinUsecase) Create(ctx context.Context, title, description, dominant_color, image_url string, width, heidth int, author_id int64, tags []string) (*domain.Pin, error) {
+func (u *PinUsecase) Create(ctx context.Context, title, description, dominant_color, image_url string, width, height int, author_id int64, tags []string) (*domain.Pin, error) {
 	title = strings.TrimSpace(title)
 	description = strings.TrimSpace(description)
 	image_url = strings.TrimSpace(image_url)
@@ -38,18 +39,19 @@ func (u *PinUsecase) Create(ctx context.Context, title, description, dominant_co
 		return nil, errors.New("image_url is required")
 	}
 
-	if heidth == 0 || width == 0 {
+	if height == 0 || width == 0 {
 		return nil, errors.New("image size not correct")
 	}
 
 	pin := &domain.Pin{
-		Title:    title,
-		Description: description,
-		ImageURL: image_url,
-		AuthorId: author_id,
-		Width:    width,
-		Height:   heidth,
-		Tags:     tags,
+		Title:         title,
+		Description:   description,
+		ImageURL:      image_url,
+		DominantColor: dominant_color,
+		AuthorId:      author_id,
+		Width:         width,
+		Height:        height,
+		Tags:          tags,
 	}
 
 	err := u.Repo.CreatePin(ctx, pin)
@@ -67,4 +69,12 @@ func (u *PinUsecase) Create(ctx context.Context, title, description, dominant_co
 	}
 
 	return pin, nil
+}
+
+func (u *PinUsecase) Update(ctx context.Context, id int64, authorID int64, params *domain.UpdatePinParams) (*domain.Pin, error) {
+	return u.Repo.UpdatePin(ctx, id, authorID, params)
+}
+
+func (u *PinUsecase) Delete(ctx context.Context, id int64, authorID int64) error {
+	return u.Repo.DeletePin(ctx, id, authorID)
 }

@@ -32,7 +32,6 @@ func NewCachedPinRepository(
 }
 
 func pinKey(id int64) string  { return fmt.Sprintf("pin:%d", id) }
-func pinListKey() string       { return "pin:list:all" }
 
 func (r *CachedPinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, error) {
 	key := pinKey(id)
@@ -59,27 +58,11 @@ func (r *CachedPinRepository) GetPinByID(ctx context.Context, id int64) (*domain
 	return pin, nil
 }
 
-func (r *CachedPinRepository) ListPins(ctx context.Context) ([]domain.Pin, error) {
-	key := pinListKey()
-
-	cached, err := r.cache.Get(ctx, key)
-	if err != nil {
-		log.Printf("cache get pin list failed: %v", err)
-	}
-	if cached != nil {
-		var pins []domain.Pin
-		if err := json.Unmarshal(cached, &pins); err == nil {
-			return pins, nil
-		}
-		log.Printf("cache unmarshal pin list failed: %v", err)
-	}
-
-	pins, err := r.wrapped.ListPins(ctx)
+func (r *CachedPinRepository) ListPins(ctx context.Context, cursor *time.Time, limit int, userId *int64) (*domain.ListPinsResult, error) {
+	pins, err := r.wrapped.ListPins(ctx, cursor, limit, userId)
 	if err != nil {
 		return nil, err
 	}
-
-	r.cacheSet(ctx, key, pins, r.listTTL)
 
 	return pins, nil
 }
@@ -90,12 +73,31 @@ func (r *CachedPinRepository) CreatePin(ctx context.Context, pin *domain.Pin) er
 		return err
 	}
 
-	if err := r.cache.Delete(ctx, pinListKey()); err != nil {
-		log.Printf("cache invalidate pin list failed: %v", err)
+	return nil
+}
+
+
+func (r *CachedPinRepository) DeletePin(ctx context.Context, pinID int64, authorID int64) error {
+	if err := r.wrapped.DeletePin(ctx, pinID, authorID); err != nil {
+		return err
+	}
+
+	if err := r.cache.Delete(ctx, pinKey(pinID)); err != nil {
+		log.Printf("cache invalidate pin:%d failed: %v", pinID, err)
 	}
 
 	return nil
 }
+
+func (r *CachedPinRepository) UpdatePin(ctx context.Context, pinID int64, author_id int64, pinDTO *domain.UpdatePinParams) (*domain.Pin, error) {
+	pin, err := r.wrapped.UpdatePin(ctx, pinID, author_id, pinDTO)
+	if err != nil {
+		return nil, err
+	}
+
+	return pin, nil
+}
+
 
 func (r *CachedPinRepository) GetPinByIDs(ctx context.Context, ids []int64) ([]domain.Pin, error) {
 	return r.wrapped.GetPinByIDs(ctx, ids)

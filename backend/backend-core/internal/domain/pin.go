@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrNotFound = errors.New("not found")
 
 type Pin struct {
 	ID          int64   `json:"id" bson:"_id,omitempty"`
@@ -13,4 +18,22 @@ type Pin struct {
 	Height      int      `json:"height" bson:"height"`
 	AuthorId    int64   `json:"author_id" bson:"author_id"`
 	CreatedAt   time.Time    `json:"created_at" bson:"created_at"`
+	DeletedAt   time.Time    `json:"deleted_at" bson:"deleted_at"`
+}
+
+
+type UpdatePinParams struct {
+	Title       *string
+	Description *string
+	DominantColor *string
+	Tags        *[]string
+	ImageURL    *string
+	Width       *int
+	Height      *int
+	AuthorId    *int64
+}
+
+type ListPinsResult struct {
+	Data       []Pin `json:"data" bson:"data"`
+	NextCursor *string `json:"next_cursor" bson:"next_cursor"`
 }
