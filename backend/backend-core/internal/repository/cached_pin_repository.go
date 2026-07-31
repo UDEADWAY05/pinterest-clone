@@ -119,6 +119,14 @@ func (r *CachedPinRepository) LoadTagsForPins(ctx context.Context, pinIDs []int6
 	return r.wrapped.LoadTagsForPins(ctx, pinIDs)
 }
 
+func (r *CachedPinRepository) ListUserCreatedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	return r.wrapped.ListUserCreatedPins(ctx, userID, cursor, limit)
+}
+
+func (r *CachedPinRepository) ListUserSavedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	return r.wrapped.ListUserSavedPins(ctx, userID, cursor, limit)
+}
+
 func (r *CachedPinRepository) cacheSet(ctx context.Context, key string, value any, ttl time.Duration) {
 	data, err := json.Marshal(value)
 	if err != nil {

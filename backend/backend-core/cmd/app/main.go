@@ -136,7 +136,7 @@ func main() {
 	// ── Handlers ────────────────────────────────────────────────────
 	pinHandler := handlers.NewPinHandler(pinUC)
 	authHandler := handlers.NewAuthHandler(authUC)
-	userHandlers := handlers.NewUserHandler(userUC)
+	userHandlers := handlers.NewUserHandler(userUC, pinUC, authUC)
 	boardHandler := handlers.NewBoardHandler(boardUC, authUC)
 
 	// ── HTTP Server ─────────────────────────────────────────────────

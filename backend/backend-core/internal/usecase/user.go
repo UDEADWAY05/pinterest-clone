@@ -25,6 +25,59 @@ func (u *UserUsecase) GetByID(ctx context.Context, id int64) (*domain.User, erro
 	return u.Repo.GetUserByID(ctx, id)
 }
 
+func (u *UserUsecase) GetProfile(ctx context.Context, id int64, currentUserID *int64) (*domain.UserProfile, error) {
+	user, err := u.Repo.GetUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	pinsCount, err := u.Repo.GetPinsCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	followersCount, err := u.Repo.GetFollowersCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	followingCount, err := u.Repo.GetFollowingCount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var isFollowing bool
+	if currentUserID != nil && *currentUserID != id {
+		isFollowing, err = u.Repo.IsFollowing(ctx, *currentUserID, id)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &domain.UserProfile{
+		ID:             user.ID,
+		Email:          user.Email,
+		DisplayName:    user.DisplayName,
+		AvatarURL:      user.AvatarURL,
+		CreatedAt:      user.CreatedAt,
+		PinsCount:      pinsCount,
+		FollowersCount: followersCount,
+		FollowingCount: followingCount,
+		IsFollowing:    isFollowing,
+	}, nil
+}
+
+func (u *UserUsecase) Follow(ctx context.Context, followerID, followingID int64) error {
+	if followerID == followingID {
+		return errors.New("cannot follow yourself")
+	}
+	return u.Repo.Follow(ctx, followerID, followingID)
+}
+
+func (u *UserUsecase) Unfollow(ctx context.Context, followerID, followingID int64) error {
+	return u.Repo.Unfollow(ctx, followerID, followingID)
+}
+
 func (u *UserUsecase) Create(ctx context.Context, email, display_name, avatar_url string) (*domain.User, error) {
 		email = strings.TrimSpace(email)
 		display_name = strings.TrimSpace(display_name)

@@ -78,3 +78,11 @@ func (u *PinUsecase) Update(ctx context.Context, id int64, authorID int64, param
 func (u *PinUsecase) Delete(ctx context.Context, id int64, authorID int64) error {
 	return u.Repo.DeletePin(ctx, id, authorID)
 }
+
+func (u *PinUsecase) ListUserCreatedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	return u.Repo.ListUserCreatedPins(ctx, userID, cursor, limit)
+}
+
+func (u *PinUsecase) ListUserSavedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	return u.Repo.ListUserSavedPins(ctx, userID, cursor, limit)
+}
