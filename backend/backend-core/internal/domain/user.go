@@ -12,6 +12,12 @@ type User struct {
 	Favorites    []int64   `json:"favorites" bson:"favorites"`
 }
 
+type UserPreview struct {
+	ID          int64  `json:"id" bson:"id"`
+	DisplayName string `json:"display_name" bson:"display_name"`
+	AvatarURL   string `json:"avatar_url" bson:"avatar_url"`
+}
+
 type UserProfile struct {
 	ID             int64     `json:"id"`
 	Email          string    `json:"email"`

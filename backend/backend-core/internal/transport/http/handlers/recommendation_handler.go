@@ -55,6 +55,12 @@ func (h *RecommendationHandler) GetFeed(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	pins, err = h.UC.EnrichPins(r.Context(), pins, currentViewerID(r, h.AuthUC))
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load recommendations", err.Error())
+		return
+	}
+
 	render.JSON(w, http.StatusOK, pins)
 }
 
@@ -82,6 +88,12 @@ func (h *RecommendationHandler) GetRelated(w http.ResponseWriter, r *http.Reques
 	limit := getQueryInt(r, "limit", 10)
 
 	pins, err := h.UC.GetRelated(r.Context(), pinID, limit)
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load related pins", err.Error())
+		return
+	}
+
+	pins, err = h.UC.EnrichPins(r.Context(), pins, currentViewerID(r, h.AuthUC))
 	if err != nil {
 		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load related pins", err.Error())
 		return

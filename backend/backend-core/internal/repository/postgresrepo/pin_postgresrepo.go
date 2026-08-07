@@ -483,3 +483,185 @@ func (r *PinRepository) ListUserSavedPins(ctx context.Context, userID int64, cur
 
 	return &domain.ListPinsResult{Data: pins, NextCursor: nextCursor}, nil
 }
+
+type pinCounts struct {
+	savesCount int
+	likesCount int
+}
+
+func (r *PinRepository) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	if len(pins) == 0 {
+		return pins, nil
+	}
+
+	ids := make([]int64, 0, len(pins))
+	for _, p := range pins {
+		ids = append(ids, p.ID)
+	}
+
+	// ── Авторы ────────────────────────────────────────────────────
+	authors := make(map[int64]domain.UserPreview)
+	authorRows, err := r.Pool.Query(ctx, `
+		SELECT id, display_name, avatar_url
+		FROM users
+		WHERE id = ANY($1)`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load pin authors: %w", err)
+	}
+	for authorRows.Next() {
+		var id int64
+		var u domain.UserPreview
+		if err := authorRows.Scan(&id, &u.DisplayName, &u.AvatarURL); err != nil {
+			authorRows.Close()
+			return nil, fmt.Errorf("scan author: %w", err)
+		}
+		u.ID = id
+		authors[id] = u
+	}
+	authorRows.Close()
+	if err := authorRows.Err(); err != nil {
+		return nil, fmt.Errorf("authors rows error: %w", err)
+	}
+
+	// ── Теги ──────────────────────────────────────────────────────
+	tagsByPin, err := r.LoadTagsForPins(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// ── Счётчики (saves / likes) из interactions ──────────────────
+	counts := make(map[int64]pinCounts)
+	countRows, err := r.Pool.Query(ctx, `
+		SELECT pin_id,
+		       COUNT(*) FILTER (WHERE event_type = 'save') AS saves_count,
+		       COUNT(*) FILTER (WHERE event_type = 'unsave') AS unsaves_count,
+		       COUNT(*) FILTER (WHERE event_type = 'click' AND meta_json ->> 'action' = 'like') AS likes_count
+		FROM interactions
+		WHERE pin_id = ANY($1)
+		GROUP BY pin_id`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load pin counts: %w", err)
+	}
+	for countRows.Next() {
+		var pinID int64
+		var saves, unsaves, likes int64
+		if err := countRows.Scan(&pinID, &saves, &unsaves, &likes); err != nil {
+			countRows.Close()
+			return nil, fmt.Errorf("scan pin counts: %w", err)
+		}
+		counts[pinID] = pinCounts{savesCount: int(saves - unsaves), likesCount: int(likes)}
+	}
+	countRows.Close()
+	if err := countRows.Err(); err != nil {
+		return nil, fmt.Errorf("counts rows error: %w", err)
+	}
+
+	// ── is_saved для текущего пользователя ────────────────────────
+	savedIDs := make(map[int64]bool)
+	if viewerID != nil {
+		savedRows, err := r.Pool.Query(ctx, `
+			SELECT DISTINCT bp.pin_id
+			FROM board_pins bp
+			JOIN boards b ON b.id = bp.board_id
+			WHERE b.owner_id = $1 AND bp.pin_id = ANY($2)`,
+			*viewerID, ids,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("load saved pins: %w", err)
+		}
+		for savedRows.Next() {
+			var pinID int64
+			if err := savedRows.Scan(&pinID); err != nil {
+				savedRows.Close()
+				return nil, fmt.Errorf("scan saved pin: %w", err)
+			}
+			savedIDs[pinID] = true
+		}
+		savedRows.Close()
+		if err := savedRows.Err(); err != nil {
+			return nil, fmt.Errorf("saved rows error: %w", err)
+		}
+	}
+
+	// ── Мутируем пины ─────────────────────────────────────────────
+	for i := range pins {
+		if a, ok := authors[pins[i].AuthorId]; ok {
+			pins[i].Author = &a
+		}
+		if tags, ok := tagsByPin[pins[i].ID]; ok {
+			pins[i].Tags = tags
+		}
+		if c, ok := counts[pins[i].ID]; ok {
+			pins[i].SavesCount = c.savesCount
+			pins[i].LikesCount = c.likesCount
+		}
+		pins[i].IsSaved = savedIDs[pins[i].ID]
+	}
+
+	return pins, nil
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func (r *PinRepository) Search(ctx context.Context, query string, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	like := "%" + escapeLike(query) + "%"
+
+	args := []any{like}
+	paramIdx := 2
+
+	cursorClause := ""
+	if cursor != nil {
+		cursorClause = fmt.Sprintf(" AND p.created_at < $%d", paramIdx)
+		args = append(args, *cursor)
+		paramIdx++
+	}
+
+	sql := `
+		SELECT DISTINCT p.id, p.title, p.description, p.image_url,
+		       p.dominant_color, p.height, p.width, p.author_id, p.created_at
+		FROM pins p
+		LEFT JOIN pin_tags pt ON pt.pin_id = p.id
+		WHERE p.deleted_at IS NULL
+		  AND (p.title ILIKE $1 OR pt.tag ILIKE $1)` + cursorClause +
+		" ORDER BY p.created_at DESC"
+
+	if limit > 0 {
+		sql += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit+1)
+		paramIdx++
+	}
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query search: %w", err)
+	}
+	defer rows.Close()
+
+	pins := make([]domain.Pin, 0)
+	for rows.Next() {
+		var pin domain.Pin
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL,
+			&pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan search pin: %w", err)
+		}
+		pins = append(pins, pin)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+		nextCursor = &c
+	}
+
+	return &domain.ListPinsResult{Data: pins, NextCursor: nextCursor}, nil
+}

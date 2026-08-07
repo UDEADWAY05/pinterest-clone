@@ -8,15 +8,17 @@ import (
 	"pinterest-core/internal/transport/http/render"
 	"pinterest-core/internal/usecase"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type PinHandler struct {
 	UC     *usecase.PinUsecase
+	AuthUC *usecase.AuthUsecase
 }
 
-func NewPinHandler(uc *usecase.PinUsecase) *PinHandler {
-	return &PinHandler{UC: uc}
+func NewPinHandler(uc *usecase.PinUsecase, authUC *usecase.AuthUsecase) *PinHandler {
+	return &PinHandler{UC: uc, AuthUC: authUC}
 }
 
 // ListPins возвращает список всех пинов.
@@ -68,6 +70,61 @@ func (h *PinHandler) ListPins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	pins.Data, err = h.UC.EnrichPins(r.Context(), pins.Data, currentViewerID(r, h.AuthUC))
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", err.Error())
+		return
+	}
+
+	render.JSON(w, http.StatusOK, pins)
+}
+
+// SearchPins возвращает список пинов по поисковому запросу.
+// @Summary      Поиск пинов
+// @Description  Ищет пины по названию и тегам (ILIKE по pins.title и pin_tags.tag)
+// @Tags         pins
+// @Produce      json
+// @Param        q       query string true  "Поисковый запрос"
+// @Param        cursor  query string false "Курсор (RFC3339Nano created_at)"
+// @Param        limit   query int    false "Лимит (default 50)"
+// @Success      200  {object}  render.JSONResponse{data=domain.ListPinsResult}
+// @Router       /api/search [get]
+func (h *PinHandler) SearchPins(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "q is required", "")
+		return
+	}
+
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		n, err := strconv.Atoi(limitStr)
+		if err != nil || n < 1 {
+			limit = 50
+		} else {
+			limit = n
+		}
+	}
+
+	var cursor *time.Time
+	if cursorStr := r.URL.Query().Get("cursor"); cursorStr != "" {
+		if parsed, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
+			cursor = &parsed
+		}
+	}
+
+	pins, err := h.UC.Search(r.Context(), q, cursor, limit)
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to search pins", err.Error())
+		return
+	}
+
+	pins.Data, err = h.UC.EnrichPins(r.Context(), pins.Data, currentViewerID(r, h.AuthUC))
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to search pins", err.Error())
+		return
+	}
+
 	render.JSON(w, http.StatusOK, pins)
 }
 
@@ -103,7 +160,13 @@ func (h *PinHandler) GetPinByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.JSON(w, http.StatusOK, pin)
+	enriched, err := h.UC.EnrichPins(r.Context(), []domain.Pin{*pin}, currentViewerID(r, h.AuthUC))
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get pin", err.Error())
+		return
+	}
+
+	render.JSON(w, http.StatusOK, enriched[0])
 }
 
 type CreatePinRequest struct {

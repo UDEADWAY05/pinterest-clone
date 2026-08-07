@@ -20,4 +20,8 @@ type PinRepository interface {
 
 	ListUserCreatedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error)
 	ListUserSavedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error)
+
+	Search(ctx context.Context, query string, cursor *time.Time, limit int) (*domain.ListPinsResult, error)
+
+	EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error)
 }

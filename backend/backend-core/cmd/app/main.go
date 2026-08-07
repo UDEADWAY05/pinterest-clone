@@ -121,6 +121,18 @@ func main() {
 	recommendationUC := usecase.NewRecommendationUsecase(pinRepo, cacheRepo)
 	recommendationHandler := handlers.NewRecommendationHandler(recommendationUC, authUC)
 
+	// ── Comments ────────────────────────────────────────────────────
+	commentPgRepo := postgresrepo.NewCommentRepository(pg.Pool)
+	commentRepo := repository.NewCachedCommentRepository(commentPgRepo)
+	commentUC := usecase.NewCommentUsecase(commentRepo)
+	commentHandler := handlers.NewCommentHandler(commentUC)
+
+	// ── Follow system ───────────────────────────────────────────────
+	followPgRepo := postgresrepo.NewFollowRepository(pg.Pool)
+	followRepo := repository.NewCachedFollowRepository(followPgRepo)
+	followUC := usecase.NewFollowUsecase(followRepo)
+	followHandler := handlers.NewFollowHandler(followUC)
+
 	// ── Миграции ────────────────────────────────────────────────────
 	m, err := migrate.New(
 		fmt.Sprintf("file://%s", "./migrations"),
@@ -134,7 +146,7 @@ func main() {
 	}
 
 	// ── Handlers ────────────────────────────────────────────────────
-	pinHandler := handlers.NewPinHandler(pinUC)
+	pinHandler := handlers.NewPinHandler(pinUC, authUC)
 	authHandler := handlers.NewAuthHandler(authUC)
 	userHandlers := handlers.NewUserHandler(userUC, pinUC, authUC)
 	boardHandler := handlers.NewBoardHandler(boardUC, authUC)
@@ -142,7 +154,7 @@ func main() {
 	// ── HTTP Server ─────────────────────────────────────────────────
 	server := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
-		Handler: httpserver.NewRouter(pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler),
+		Handler: httpserver.NewRouter(pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler, commentHandler, followHandler),
 	}
 
 	stop := make(chan os.Signal, 1)

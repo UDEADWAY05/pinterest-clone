@@ -20,6 +20,7 @@ type BoardUsecase struct {
 	Repo    repository.BoardRepository
 	PinRepo interface {
 		GetPinByID(ctx context.Context, id int64) (*domain.Pin, error)
+		EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error)
 	}
 }
 
@@ -28,6 +29,7 @@ type BoardUsecase struct {
 // чтобы не тащить весь PinRepository.
 func NewBoardUsecase(repo repository.BoardRepository, pinRepo interface {
 	GetPinByID(ctx context.Context, id int64) (*domain.Pin, error)
+	EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error)
 }) *BoardUsecase {
 	return &BoardUsecase{
 		Repo:    repo,
@@ -126,4 +128,8 @@ func (u *BoardUsecase) RemovePinFromBoard(ctx context.Context, userID, boardID, 
 
 func (u *BoardUsecase) GetBoardPins(ctx context.Context, boardID int64) ([]domain.Pin, error) {
 	return u.Repo.GetBoardPins(ctx, boardID)
+}
+
+func (u *BoardUsecase) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	return u.PinRepo.EnrichPins(ctx, pins, viewerID)
 }

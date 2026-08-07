@@ -91,6 +91,12 @@ func (h *UserHandler) ListUserCreatedPins(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	result.Data, err = h.PinUC.EnrichPins(r.Context(), result.Data, currentViewerID(r, h.AuthUC))
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", "")
+		return
+	}
+
 	render.JSON(w, http.StatusOK, result)
 }
 
@@ -119,6 +125,12 @@ func (h *UserHandler) ListUserSavedPins(w http.ResponseWriter, r *http.Request) 
 	}
 
 	result, err := h.PinUC.ListUserSavedPins(r.Context(), userID, cursor, limit)
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", "")
+		return
+	}
+
+	result.Data, err = h.PinUC.EnrichPins(r.Context(), result.Data, currentViewerID(r, h.AuthUC))
 	if err != nil {
 		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", "")
 		return

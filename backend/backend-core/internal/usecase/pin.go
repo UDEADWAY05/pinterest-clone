@@ -86,3 +86,15 @@ func (u *PinUsecase) ListUserCreatedPins(ctx context.Context, userID int64, curs
 func (u *PinUsecase) ListUserSavedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
 	return u.Repo.ListUserSavedPins(ctx, userID, cursor, limit)
 }
+
+func (u *PinUsecase) Search(ctx context.Context, query string, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, errors.New("query is required")
+	}
+	return u.Repo.Search(ctx, query, cursor, limit)
+}
+
+func (u *PinUsecase) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	return u.Repo.EnrichPins(ctx, pins, viewerID)
+}

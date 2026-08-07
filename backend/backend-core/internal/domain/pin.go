@@ -20,6 +20,10 @@ type Pin struct {
 	CreatedAt     time.Time `json:"created_at" bson:"created_at"`
 	DeletedAt     time.Time `json:"deleted_at" bson:"deleted_at"`
 	SavedAt       *time.Time `json:"saved_at,omitempty" bson:"saved_at,omitempty"`
+	Author        *UserPreview `json:"author,omitempty" bson:"author,omitempty"`
+	SavesCount    int          `json:"saves_count" bson:"saves_count"`
+	LikesCount    int          `json:"likes_count" bson:"likes_count"`
+	IsSaved       bool         `json:"is_saved" bson:"is_saved"`
 }
 
 

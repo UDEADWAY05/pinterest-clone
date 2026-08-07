@@ -165,18 +165,6 @@ func (h *BoardHandler) RemovePinFromBoard(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HandlePinInBoard — комбинированный handler: POST = сохранить, DELETE = удалить.
-func (h *BoardHandler) HandlePinInBoard(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		h.SavePinToBoard(w, r)
-	case http.MethodDelete:
-		h.RemovePinFromBoard(w, r)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	}
-}
-
 // GetBoardPins возвращает пины в доске.
 // @Summary      Пины доски
 // @Description  Возвращает все пины, сохранённые в указанной доске
@@ -198,6 +186,12 @@ func (h *BoardHandler) GetBoardPins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pins, err := h.UC.GetBoardPins(r.Context(), boardID)
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", err.Error())
+		return
+	}
+
+	pins, err = h.UC.EnrichPins(r.Context(), pins, currentViewerID(r, h.AuthUC))
 	if err != nil {
 		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load pins", err.Error())
 		return

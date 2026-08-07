@@ -127,6 +127,14 @@ func (r *CachedPinRepository) ListUserSavedPins(ctx context.Context, userID int6
 	return r.wrapped.ListUserSavedPins(ctx, userID, cursor, limit)
 }
 
+func (r *CachedPinRepository) Search(ctx context.Context, query string, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	return r.wrapped.Search(ctx, query, cursor, limit)
+}
+
+func (r *CachedPinRepository) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	return r.wrapped.EnrichPins(ctx, pins, viewerID)
+}
+
 func (r *CachedPinRepository) cacheSet(ctx context.Context, key string, value any, ttl time.Duration) {
 	data, err := json.Marshal(value)
 	if err != nil {
