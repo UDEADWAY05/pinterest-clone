@@ -46,6 +46,7 @@ func (u *UserUsecase) GetProfile(ctx context.Context, id int64, currentUserID *i
 		return nil, err
 	}
 
+
 	var isFollowing bool
 	if currentUserID != nil && *currentUserID != id {
 		isFollowing, err = u.Repo.IsFollowing(ctx, *currentUserID, id)
@@ -60,10 +61,12 @@ func (u *UserUsecase) GetProfile(ctx context.Context, id int64, currentUserID *i
 		DisplayName:    user.DisplayName,
 		AvatarURL:      user.AvatarURL,
 		CreatedAt:      user.CreatedAt,
+		Bio:            user.Bio,
 		PinsCount:      pinsCount,
 		FollowersCount: followersCount,
 		FollowingCount: followingCount,
 		IsFollowing:    isFollowing,
+		IsCurrentUser:  currentUserID != nil && *currentUserID == id,
 	}, nil
 }
 
@@ -94,7 +97,7 @@ func (u *UserUsecase) Create(ctx context.Context, email, display_name, avatar_ur
 		if avatar_url == "" {
 			return nil, errors.New("avatar_url is required")
 		}
-		
+
 		user := &domain.User{
 			Email: email,
 			DisplayName: display_name,

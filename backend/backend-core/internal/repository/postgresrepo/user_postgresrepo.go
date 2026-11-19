@@ -22,7 +22,7 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	rows, err := r.Pool.Query(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users
 		ORDER BY created_at DESC`)
 
@@ -35,13 +35,14 @@ func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	var users []domain.User
 	for rows.Next() {
 		var user domain.User
-		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt, &user.Bio); err != nil {
 			fmt.Print(err)
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 
 		users = append(users, user)
 	}
+	fmt.Print(users[0])
 	return users, nil
 }
 
@@ -49,7 +50,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (*domain.Use
 	var user domain.User
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users WHERE id = $1`,
 		id).Scan(
 		&user.ID,
@@ -58,6 +59,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (*domain.Use
 		&user.DisplayName,
 		&user.AvatarURL,
 		&user.CreatedAt,
+		&user.Bio,
 	)
 
 	if err != nil {
@@ -71,7 +73,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	var user domain.User
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users
 		WHERE email = $1`,
 		email).Scan(
@@ -81,6 +83,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		&user.DisplayName,
 		&user.AvatarURL,
 		&user.CreatedAt,
+		&user.Bio,
 	)
 
 	if err != nil {
@@ -99,10 +102,10 @@ func mapNoRows(err error, notFound error) error {
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	err := r.Pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, avatar_url)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (email, password_hash, display_name, avatar_url, bio)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at`,
-		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL,
+		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL, user.Bio,
 	).Scan(&user.ID, &user.CreatedAt)
 
 	if err != nil {

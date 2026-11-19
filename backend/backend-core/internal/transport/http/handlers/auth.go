@@ -28,6 +28,7 @@ type authUserResponse struct {
     DisplayName string    `json:"display_name"`
     AvatarURL   string    `json:"avatar_url"`
     CreatedAt   time.Time `json:"created_at"`
+    Bio         string    `json:"bio"`
 }
 
 type authResponse struct {
@@ -39,6 +40,7 @@ type authRequest struct {
     Password    string `json:"password"`
     DisplayName string `json:"display_name"`
     AvatarURL   string `json:"avatar_url"`
+    Bio         string `json:"bio"`
 }
 
 
@@ -74,7 +76,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    user, token, err := h.UC.Register(r.Context(), req.Email, req.Password, req.DisplayName, req.AvatarURL)
+    user, token, err := h.UC.Register(r.Context(), req.Email, req.Password, req.DisplayName, req.AvatarURL, req.Bio)
     if err != nil {
         writeAuthError(w, err)
         return
@@ -181,6 +183,7 @@ func writeAuthUser(w http.ResponseWriter, user *domain.User, status int) {
         DisplayName: user.DisplayName,
         AvatarURL:   user.AvatarURL,
         CreatedAt:   user.CreatedAt,
+        Bio:         user.Bio,
     })
 }
 

@@ -1,11 +1,8 @@
 package domain
 
 import (
-	"errors"
 	"time"
 )
-
-var ErrNotFound = errors.New("not found")
 
 type Pin struct {
 	ID            int64     `json:"id" bson:"_id,omitempty"`

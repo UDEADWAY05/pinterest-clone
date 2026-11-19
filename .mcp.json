@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "C:\\полный\\путь\\codegraph.exe",
+      "args": []
+    }
+  }
+}

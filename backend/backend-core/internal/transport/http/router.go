@@ -49,6 +49,7 @@ func NewRouter(
 	mux.HandleFunc("GET /api/users/{id}/saved", userHandler.ListUserSavedPins)
 	mux.HandleFunc("GET /api/users/{id}/followers", followHandler.ListFollowers)
 	mux.HandleFunc("GET /api/users/{id}/following", followHandler.ListFollowing)
+	mux.HandleFunc("GET /api/users/{id}/boards", boardHandler.GetUserBoards)
 	mux.HandleFunc("GET /api/boards/{boardId}/pins", boardHandler.GetBoardPins)
 	mux.HandleFunc("POST /api/interactions", interactionHandler.Save)
 	mux.HandleFunc("GET /api/recommendations", recommendationHandler.GetFeed)

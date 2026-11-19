@@ -10,6 +10,7 @@ type User struct {
 	AvatarURL    string    `json:"avatar_url" bson:"avatar_url"`
 	CreatedAt    time.Time `json:"created_at" bson:"created_at"`
 	Favorites    []int64   `json:"favorites" bson:"favorites"`
+	Bio          string    `json:"bio" bson:"bio"`
 }
 
 type UserPreview struct {
@@ -28,6 +29,8 @@ type UserProfile struct {
 	FollowersCount int       `json:"followers_count"`
 	FollowingCount int       `json:"following_count"`
 	IsFollowing    bool      `json:"is_following"`
+	IsCurrentUser  bool      `json:"is_current_user"`
+	Bio            string    `json:"bio" bson:"bio"`
 }
 
 // id BIGSERIAL PRIMARY KEY,

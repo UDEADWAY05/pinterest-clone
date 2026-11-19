@@ -92,6 +92,24 @@ func (h *BoardHandler) ListMyBoards(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, http.StatusOK, boards)
 }
 
+
+func (h *BoardHandler) GetUserBoards(w http.ResponseWriter, r *http.Request) {
+	userID, err := h.getCurrentUserID(r)
+	if err != nil {
+		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), "")
+		return
+	}
+
+	boards, err := h.UC.ListUserBoards(r.Context(), userID)
+	if err != nil {
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load boards", err.Error())
+		return
+	}
+
+	render.JSON(w, http.StatusOK, boards)
+}
+
+
 // SavePinToBoard сохраняет пин в доску.
 // @Summary      Сохранить пин
 // @Description  Сохраняет пин в указанную доску (только для владельца доски)

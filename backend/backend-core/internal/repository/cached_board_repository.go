@@ -34,6 +34,8 @@ func NewCachedBoardRepository(
 func userBoardsKey(userID int64) string  { return fmt.Sprintf("boards:user:%d", userID) }
 func boardPinsKey(boardID int64) string  { return fmt.Sprintf("boards:%d:pins", boardID) }
 func boardKey(boardID int64) string      { return fmt.Sprintf("boards:%d", boardID) }
+func defaultBoardKey(userID int64) string { return fmt.Sprintf("boards:user:%d:default", userID) }
+
 
 func (r *CachedBoardRepository) CreateBoard(ctx context.Context, board *domain.Board) error {
 	if err := r.wrapped.CreateBoard(ctx, board); err != nil {
@@ -46,7 +48,32 @@ func (r *CachedBoardRepository) CreateBoard(ctx context.Context, board *domain.B
 	return nil
 }
 
-func (r *CachedBoardRepository) ListUserBoards(ctx context.Context, userID int64) ([]domain.Board, error) {
+func (r *CachedBoardRepository) GetDefaultBoard(ctx context.Context, userID int64) (*domain.Board, error) {
+	key := defaultBoardKey(userID)
+
+	cached, err := r.cache.Get(ctx, key)
+	if err != nil {
+		log.Printf("cache get default board %d: %v", userID, err)
+	}
+	if cached != nil {
+		var board *domain.Board
+		if err := json.Unmarshal(cached, &board); err != nil {
+			return nil, err
+		}
+		return board, nil
+	}
+
+	board, err := r.wrapped.GetDefaultBoard(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	r.cacheSetJSON(ctx, key, board, r.boardTTL)
+	return board, nil
+}
+
+//NOTE: Нужно подумать как правильно это кешировать и есть ли вообще в этом смысл сейчас при добавлении пина на доску он сразу не появляется в recently pinned доски
+func (r *CachedBoardRepository) ListUserBoards(ctx context.Context, userID int64) ([]domain.BoardWithRecentPins, error) {
 	key := userBoardsKey(userID)
 
 	cached, err := r.cache.Get(ctx, key)
@@ -54,7 +81,7 @@ func (r *CachedBoardRepository) ListUserBoards(ctx context.Context, userID int64
 		log.Printf("cache get boards:user:%d: %v", userID, err)
 	}
 	if cached != nil {
-		var boards []domain.Board
+		var boards []domain.BoardWithRecentPins
 		if err := json.Unmarshal(cached, &boards); err == nil {
 			return boards, nil
 		}
@@ -66,7 +93,7 @@ func (r *CachedBoardRepository) ListUserBoards(ctx context.Context, userID int64
 		return nil, err
 	}
 
-	r.cacheSetJSON(ctx, key, boards, r.listTTL)
+	// r.cacheSetJSON(ctx, key, boards, r.listTTL)
 	return boards, nil
 }
 
