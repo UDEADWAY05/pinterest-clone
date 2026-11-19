@@ -1,0 +1,586 @@
+definitions:
+  domain.Board:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_private:
+        type: boolean
+      owner_id:
+        type: integer
+      title:
+        type: string
+    type: object
+  domain.BoardPin:
+    properties:
+      board_id:
+        type: integer
+      pin_id:
+        type: integer
+      saved_at:
+        type: string
+    type: object
+  domain.Pin:
+    properties:
+      author_id:
+        type: integer
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      dominant_color:
+        type: string
+      height:
+        type: integer
+      id:
+        type: integer
+      image_url:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      width:
+        type: integer
+    type: object
+  domain.User:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      favorites:
+        items:
+          type: integer
+        type: array
+      id:
+        type: integer
+    type: object
+  handlers.CreatePinRequest:
+    properties:
+      description:
+        type: string
+      dominant_color:
+        type: string
+      height:
+        type: integer
+      image_url:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      width:
+        type: integer
+    type: object
+  handlers.authRequest:
+    properties:
+      avatar_url:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.authUserResponse:
+    properties:
+      avatar_url:
+        type: string
+      created_at:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+    type: object
+  handlers.createBoardRequest:
+    properties:
+      is_private:
+        type: boolean
+      title:
+        type: string
+    type: object
+  render.ErrorDetails:
+    properties:
+      code:
+        type: string
+      details:
+        type: string
+      message:
+        type: string
+    type: object
+  render.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/render.ErrorDetails'
+    type: object
+  render.JSONResponse:
+    properties:
+      data: {}
+    type: object
+  usecase.UploadRequest:
+    properties:
+      content_type:
+        description: MIME-тип (image/jpeg, image/png)
+        type: string
+      file_name:
+        description: оригинальное имя файла (нужно только для расширения)
+        type: string
+      file_size:
+        description: размер в байтах
+        type: integer
+    type: object
+  usecase.UploadResult:
+    properties:
+      expires_in:
+        description: секунд до истечения upload_url
+        type: integer
+      key:
+        description: ключ в S3 (на случай, если клиенту нужен)
+        type: string
+      public_url:
+        description: постоянный URL для чтения (сохраняем в image_url)
+        type: string
+      upload_url:
+        description: временный URL для PUT-запроса (15 мин)
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Аутентификация по email и паролю, возвращает session cookie
+      parameters:
+      - description: Email и пароль
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.authRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.authUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      summary: Вход
+      tags:
+      - auth
+  /api/auth/logout:
+    post:
+      description: Удаляет session cookie и завершает сессию
+      responses:
+        "204":
+          description: No Content
+      security:
+      - SessionCookie: []
+      summary: Выход
+      tags:
+      - auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт нового пользователя и возвращает session cookie
+      parameters:
+      - description: Данные для регистрации
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.authRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.authUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      summary: Регистрация
+      tags:
+      - auth
+  /api/boards:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новую доску для текущего пользователя
+      parameters:
+      - description: Данные доски
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.createBoardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Board'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Создать доску
+      tags:
+      - boards
+  /api/boards/{boardId}/pins:
+    get:
+      description: Возвращает все пины, сохранённые в указанной доске
+      parameters:
+      - description: ID доски
+        in: path
+        name: boardId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Pin'
+                  type: array
+              type: object
+      summary: Пины доски
+      tags:
+      - boards
+  /api/boards/{boardId}/pins/{pinId}:
+    delete:
+      description: Удаляет пин из указанной доски (только для владельца доски)
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Удалить пин из доски
+      tags:
+      - boards
+    post:
+      description: Сохраняет пин в указанную доску (только для владельца доски)
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.BoardPin'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Сохранить пин
+      tags:
+      - boards
+  /api/boards/me:
+    get:
+      description: Возвращает все доски текущего авторизованного пользователя
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Board'
+                  type: array
+              type: object
+      security:
+      - SessionCookie: []
+      summary: Мои доски
+      tags:
+      - boards
+  /api/interactions:
+    post:
+      consumes:
+      - application/json
+      description: Сохраняет событие поведения пользователя (показ, клик, сохранение
+        и т.д.). Событие попадает в буфер и сбрасывается в БД пачкой.
+      responses:
+        "202":
+          description: Accepted — событие принято в буфер
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      summary: Отправить событие
+      tags:
+      - interactions
+  /api/pins:
+    get:
+      description: Возвращает все пины, отсортированные по дате создания
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Pin'
+                  type: array
+              type: object
+      summary: Список пинов
+      tags:
+      - pins
+  /api/pins/{id}:
+    get:
+      description: Возвращает детальную информацию о пине по его ID
+      parameters:
+      - description: ID пина
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Pin'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      summary: Получить пин
+      tags:
+      - pins
+  /api/pins/{id}/related:
+    get:
+      description: Возвращает пины, похожие на указанный (по embedding или тегам)
+      parameters:
+      - description: ID пина
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Количество (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Pin'
+                  type: array
+              type: object
+      summary: Похожие пины
+      tags:
+      - recommendations
+  /api/pins/create:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новый пин. Требует авторизации (session cookie)
+      parameters:
+      - description: Данные пина
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreatePinRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/domain.Pin'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Создать пин
+      tags:
+      - pins
+  /api/recommendations:
+    get:
+      description: Возвращает персонализированную ленту пинов с пагинацией. Если пользователь
+        авторизован — лента строится на основе его взаимодействий.
+      parameters:
+      - description: Количество пинов (default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Смещение (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.Pin'
+                  type: array
+              type: object
+      summary: Рекомендации
+      tags:
+      - recommendations
+  /api/uploads/presign:
+    post:
+      consumes:
+      - application/json
+      description: Генерирует временный URL для прямой загрузки файла в S3/MinIO.
+        Файл не проходит через сервер.
+      parameters:
+      - description: Информация о файле
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/usecase.UploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/usecase.UploadResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Получить presigned URL
+      tags:
+      - upload
+  /api/user/current:
+    get:
+      description: Возвращает профиль пользователя по session cookie
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.authUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/render.ErrorResponse'
+      security:
+      - SessionCookie: []
+      summary: Текущий пользователь
+      tags:
+      - auth
+  /api/users:
+    get:
+      description: Возвращает всех пользователей
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/render.JSONResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/domain.User'
+                  type: array
+              type: object
+      summary: Список пользователей
+      tags:
+      - users
+  /health:
+    get:
+      description: Возвращает 200 OK, если сервер работает
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+      summary: Health check
+      tags:
+      - system
+swagger: "2.0"

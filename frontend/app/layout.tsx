@@ -40,10 +40,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={googleSansText.className}>
+      <head>
         {/*{process.env.NODE_ENV === 'development' && (
           <script src="https://unpkg.com/react-scan/dist/auto.global.js" crossOrigin="anonymous" />
         )}*/}
+      </head>
+      <body className={googleSansText.className}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

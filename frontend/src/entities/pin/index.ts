@@ -1,2 +1,2 @@
 export { PinCard } from './ui/PinCard';
-export { usePins, fetchPins, fetchPin } from './api/api';
+export { useInfinitePins, fetchPinsPaginated, fetchPin } from './api/api';

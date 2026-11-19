@@ -22,7 +22,7 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	rows, err := r.Pool.Query(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users
 		ORDER BY created_at DESC`)
 
@@ -35,13 +35,14 @@ func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	var users []domain.User
 	for rows.Next() {
 		var user domain.User
-		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt); err != nil {
+		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt, &user.Bio); err != nil {
 			fmt.Print(err)
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 
 		users = append(users, user)
 	}
+	fmt.Print(users[0])
 	return users, nil
 }
 
@@ -49,7 +50,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (*domain.Use
 	var user domain.User
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users WHERE id = $1`,
 		id).Scan(
 		&user.ID,
@@ -58,6 +59,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int64) (*domain.Use
 		&user.DisplayName,
 		&user.AvatarURL,
 		&user.CreatedAt,
+		&user.Bio,
 	)
 
 	if err != nil {
@@ -71,7 +73,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 	var user domain.User
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, display_name, avatar_url, created_at
+		SELECT id, email, password_hash, display_name, avatar_url, created_at, bio
 		FROM users
 		WHERE email = $1`,
 		email).Scan(
@@ -81,6 +83,7 @@ func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*dom
 		&user.DisplayName,
 		&user.AvatarURL,
 		&user.CreatedAt,
+		&user.Bio,
 	)
 
 	if err != nil {
@@ -99,14 +102,87 @@ func mapNoRows(err error, notFound error) error {
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	err := r.Pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, avatar_url)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO users (email, password_hash, display_name, avatar_url, bio)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at`,
-		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL,
+		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL, user.Bio,
 	).Scan(&user.ID, &user.CreatedAt)
 
 	if err != nil {
 		return fmt.Errorf("create user: %w", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) GetPinsCount(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := r.Pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM pins
+		WHERE author_id = $1 AND deleted_at IS NULL`,
+		userID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("query pins count: %w", err)
+	}
+	return count, nil
+}
+
+func (r *UserRepository) GetFollowersCount(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := r.Pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM follows WHERE following_id = $1`,
+		userID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("query followers count: %w", err)
+	}
+	return count, nil
+}
+
+func (r *UserRepository) GetFollowingCount(ctx context.Context, userID int64) (int, error) {
+	var count int
+	err := r.Pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM follows WHERE follower_id = $1`,
+		userID,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("query following count: %w", err)
+	}
+	return count, nil
+}
+
+func (r *UserRepository) IsFollowing(ctx context.Context, followerID, followingID int64) (bool, error) {
+	var exists bool
+	err := r.Pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)`,
+		followerID, followingID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("query is following: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *UserRepository) Follow(ctx context.Context, followerID, followingID int64) error {
+	_, err := r.Pool.Exec(ctx, `
+		INSERT INTO follows (follower_id, following_id)
+		VALUES ($1, $2)
+		ON CONFLICT DO NOTHING`,
+		followerID, followingID,
+	)
+	if err != nil {
+		return fmt.Errorf("follow: %w", err)
+	}
+	return nil
+}
+
+func (r *UserRepository) Unfollow(ctx context.Context, followerID, followingID int64) error {
+	_, err := r.Pool.Exec(ctx, `
+		DELETE FROM follows WHERE follower_id = $1 AND following_id = $2`,
+		followerID, followingID,
+	)
+	if err != nil {
+		return fmt.Errorf("unfollow: %w", err)
 	}
 	return nil
 }

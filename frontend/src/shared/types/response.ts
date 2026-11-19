@@ -11,3 +11,8 @@ export type ApiError = {
     details?: string;
   };
 };
+
+export type ApiPaginatedResponse<T> = {
+  data: T[];
+  next_cursor: string | null;
+};

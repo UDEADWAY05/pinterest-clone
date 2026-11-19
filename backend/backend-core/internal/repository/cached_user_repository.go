@@ -124,6 +124,30 @@ func (r *CachedUserRepository) CreateUser(ctx context.Context, user *domain.User
 	return nil
 }
 
+func (r *CachedUserRepository) GetPinsCount(ctx context.Context, userID int64) (int, error) {
+	return r.wrapped.GetPinsCount(ctx, userID)
+}
+
+func (r *CachedUserRepository) GetFollowersCount(ctx context.Context, userID int64) (int, error) {
+	return r.wrapped.GetFollowersCount(ctx, userID)
+}
+
+func (r *CachedUserRepository) GetFollowingCount(ctx context.Context, userID int64) (int, error) {
+	return r.wrapped.GetFollowingCount(ctx, userID)
+}
+
+func (r *CachedUserRepository) IsFollowing(ctx context.Context, followerID, followingID int64) (bool, error) {
+	return r.wrapped.IsFollowing(ctx, followerID, followingID)
+}
+
+func (r *CachedUserRepository) Follow(ctx context.Context, followerID, followingID int64) error {
+	return r.wrapped.Follow(ctx, followerID, followingID)
+}
+
+func (r *CachedUserRepository) Unfollow(ctx context.Context, followerID, followingID int64) error {
+	return r.wrapped.Unfollow(ctx, followerID, followingID)
+}
+
 func (r *CachedUserRepository) cacheSet(ctx context.Context, key string, value any) {
 	data, err := json.Marshal(value)
 	if err != nil {

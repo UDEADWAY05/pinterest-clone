@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   images: {
+    dangerouslyAllowLocalIP: true,
     remotePatterns: [
       {
         protocol: 'https',
@@ -17,6 +18,18 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**', // Разрешаем любые пути после домена
       },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '9000',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: '127.0.0.1',
+        port: '9000',
+        pathname: '/**',
+      },
       // {
       //   protocol: 'http',
       //   hostname: 'localhost', // Разрешаем скачивать картинки с этого домена
@@ -26,12 +39,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*',
-      },
-    ];
+    return [{ source: '/api/:path*', destination: 'http://localhost:8080/api/:path*' }];
   },
 };
 

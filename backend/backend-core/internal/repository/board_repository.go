@@ -8,8 +8,9 @@ import (
 
 type BoardRepository interface {
 	CreateBoard(ctx context.Context, board *domain.Board) error
-	ListUserBoards(ctx context.Context, userID int64) ([]domain.Board, error)
+	ListUserBoards(ctx context.Context, userID int64) ([]domain.BoardWithRecentPins, error)
 	GetBoardByID(ctx context.Context, boardID int64) (*domain.Board, error)
+	GetDefaultBoard(ctx context.Context, userID int64) (*domain.Board, error) //TODO: переделать, сохранять как обычный борд, заметил на этапе коммита
 	SavePinToBoard(ctx context.Context, boardID, pinID int64) (*domain.BoardPin, error)
 	RemovePinFromBoard(ctx context.Context, boardID, pinID int64) error
 	GetBoardPins(ctx context.Context, boardID int64) ([]domain.Pin, error)

@@ -2,8 +2,11 @@ package postgresrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"pinterest-core/internal/domain"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,38 +16,80 @@ type PinRepository struct {
 	Pool *pgxpool.Pool
 }
 
-
-
 func NewPinRepository(pool *pgxpool.Pool) *PinRepository {
 	return &PinRepository{Pool: pool}
 }
 
 
-func (r *PinRepository) ListPins(ctx context.Context) ([]domain.Pin, error) {
-	rows, err := r.Pool.Query(ctx, "SELECT id, title, description, image_url, dominant_color, height, width, created_at FROM pins ORDER BY created_at DESC")
+
+func (r *PinRepository) ListPins(ctx context.Context, cursor *time.Time, limit int, userId *int64) (*domain.ListPinsResult, error) {
+	whereClause := " WHERE deleted_at IS NULL"
+	paramIdx := 1
+	args := []any{}
+
+	if userId != nil {
+		whereClause += fmt.Sprintf(" AND author_id = $%d", paramIdx)
+		args = append(args, *userId)
+		paramIdx++
+	}
+
+	if cursor != nil {
+		whereClause += fmt.Sprintf(" AND created_at < $%d", paramIdx)
+		args = append(args, cursor)
+		paramIdx++
+	}
+
+	query := `
+		SELECT
+			id, title, description, image_url, dominant_color, height, width, author_id, created_at
+		FROM pins` + whereClause + " ORDER BY created_at DESC"
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit + 1)
+		paramIdx++
+	}
+	rows, err := r.Pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("query notes: %w", err)
+		return nil, fmt.Errorf("query pins: %w", err)
 	}
 	defer rows.Close()
 
 
-	var pins []domain.Pin
+	pins := make([]domain.Pin, 0)
 	for rows.Next() {
 		var pin domain.Pin
-		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL, &pin.DominantColor, &pin.Height, &pin.Width, &pin.CreatedAt); err != nil {
-			return nil,  fmt.Errorf("scan note: %w", err)
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL, &pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan note: %w", err)
 		}
 		pins = append(pins, pin)
 	}
-	return pins, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+		nextCursor = &c
+	} else {
+		nextCursor = nil
+	}
+
+
+	return &domain.ListPinsResult{
+		Data:       pins,
+		NextCursor: nextCursor,
+	}, nil
 }
 
 func (r *PinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, error) {
 	var pin domain.Pin
 
 	err := r.Pool.QueryRow(ctx, `
-		SELECT id, title, description, created_at, image_url, dominant_color, height, width
-		FROM pins WHERE id = $1`,
+		SELECT id, title, description, created_at, image_url, dominant_color, height, width, author_id
+		FROM pins WHERE id = $1 AND deleted_at IS NULL`,
 		id).Scan(
 		&pin.ID,
 		&pin.Title,
@@ -54,9 +99,13 @@ func (r *PinRepository) GetPinByID(ctx context.Context, id int64) (*domain.Pin, 
 		&pin.DominantColor,
 		&pin.Height,
 		&pin.Width,
+		&pin.AuthorId,
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("get pin by id: %w", domain.ErrNotFound)
+		}
 		return nil, fmt.Errorf("get pin by id: %w", err)
 	}
 
@@ -72,7 +121,7 @@ func (r *PinRepository) GetPinByIDs(ctx context.Context, ids []int64) ([]domain.
 		SELECT id, title, description, image_url,
 		       dominant_color, height, width, author_id, created_at
 		FROM pins
-		WHERE id = ANY($1)
+		WHERE id = ANY($1) AND deleted_at IS NULL
 		ORDER BY created_at DESC`,
 		ids,
 	)
@@ -96,6 +145,71 @@ func (r *PinRepository) CreatePin(ctx context.Context, pin *domain.Pin) error {
 		return fmt.Errorf("create pin: %w", err)
 	}
 	return nil
+}
+
+func (r *PinRepository) DeletePin(ctx context.Context, id int64, authorID int64) error {
+	_, err := r.Pool.Exec(ctx, `
+		UPDATE pins
+		SET deleted_at = NOW()
+		WHERE id = $1 AND author_id = $2 AND deleted_at IS NULL;`,
+		id, authorID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("delete pin: %w", err)
+	}
+	return nil
+}
+
+func (r *PinRepository) UpdatePin(ctx context.Context, id int64, author_id int64, pin *domain.UpdatePinParams) (*domain.Pin, error) {
+	setValues := make([]string, 0)
+	args := make([]any, 0)
+
+	argID := 1
+
+	if pin.Title != nil {
+		setValues = append(setValues, fmt.Sprintf("title = $%d", argID))
+		args = append(args, *pin.Title)
+		argID++
+	}
+
+	if pin.Description != nil {
+		setValues = append(setValues, fmt.Sprintf("description = $%d", argID))
+		args = append(args, *pin.Description)
+		argID++
+	}
+
+	if pin.ImageURL != nil {
+		setValues = append(setValues, fmt.Sprintf("image_url = $%d", argID))
+		args = append(args, *pin.ImageURL)
+		argID++
+	}
+
+	if len(setValues) == 0 {
+		return nil, fmt.Errorf("update pin: no fields to update")
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE pins
+		SET %s
+		WHERE id = $%d AND author_id = $%d AND deleted_at IS NULL
+		RETURNING id, title, description, image_url, dominant_color, height, width, author_id, created_at`,
+		strings.Join(setValues, ", "),
+		argID,
+		argID + 1,
+	)
+
+	args = append(args, id)
+	args = append(args, author_id)
+
+	var updatedPin domain.Pin
+
+	err := r.Pool.QueryRow(ctx, query, args...).Scan(&updatedPin.ID, &updatedPin.Title, &updatedPin.Description, &updatedPin.ImageURL,
+		&updatedPin.DominantColor, &updatedPin.Height, &updatedPin.Width, &updatedPin.AuthorId, &updatedPin.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("update pin: %w", err)
+	}
+	return &updatedPin, nil
 }
 
 func (r *PinRepository) FindTrending(ctx context.Context, limit int) ([]domain.Pin, error) {
@@ -267,4 +381,287 @@ func scanPins(rows pgx.Rows) ([]domain.Pin, error) {
 		pins = append(pins, pin)
 	}
 	return pins, nil
+}
+
+func (r *PinRepository) ListUserCreatedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	whereClause := " WHERE author_id = $1 AND deleted_at IS NULL"
+	args := []any{userID}
+	paramIdx := 2
+
+	if cursor != nil {
+		whereClause += fmt.Sprintf(" AND created_at < $%d", paramIdx)
+		args = append(args, *cursor)
+		paramIdx++
+	}
+
+	query := `
+		SELECT
+			id, title, description, image_url, dominant_color, height, width, author_id, created_at
+		FROM pins` + whereClause + " ORDER BY created_at DESC"
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit+1)
+		paramIdx++
+	}
+
+	rows, err := r.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query user created pins: %w", err)
+	}
+	defer rows.Close()
+
+	pins, err := scanPins(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].CreatedAt.Format(time.RFC3339Nano)
+		nextCursor = &c
+	}
+
+	return &domain.ListPinsResult{Data: pins, NextCursor: nextCursor}, nil
+}
+
+func (r *PinRepository) ListUserSavedPins(ctx context.Context, userID int64, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	args := []any{userID}
+	paramIdx := 2
+
+	cursorClause := ""
+	if cursor != nil {
+		cursorClause = fmt.Sprintf(" AND sp.saved_at < $%d", paramIdx)
+		args = append(args, *cursor)
+		paramIdx++
+	}
+
+	query := fmt.Sprintf(`
+		SELECT p.id, p.title, p.description, p.image_url, p.dominant_color, p.height, p.width, p.author_id, p.created_at, sp.saved_at
+		FROM pins p
+		JOIN (
+			SELECT DISTINCT ON (bp.pin_id) bp.pin_id, bp.saved_at
+			FROM board_pins bp
+			JOIN boards b ON b.id = bp.board_id
+			WHERE b.owner_id = $1
+			ORDER BY bp.pin_id, bp.saved_at DESC
+		) sp ON sp.pin_id = p.id
+		WHERE p.deleted_at IS NULL%s
+		ORDER BY sp.saved_at DESC`, cursorClause)
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit+1)
+		paramIdx++
+	}
+
+	rows, err := r.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query user saved pins: %w", err)
+	}
+	defer rows.Close()
+
+	pins := make([]domain.Pin, 0)
+	for rows.Next() {
+		var pin domain.Pin
+		var savedAt time.Time
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL,
+			&pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt, &savedAt); err != nil {
+			return nil, fmt.Errorf("scan saved pin: %w", err)
+		}
+		pin.SavedAt = &savedAt
+		pins = append(pins, pin)
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].SavedAt.Format(time.RFC3339Nano)
+		nextCursor = &c
+	}
+
+	return &domain.ListPinsResult{Data: pins, NextCursor: nextCursor}, nil
+}
+
+type pinCounts struct {
+	savesCount int
+	likesCount int
+}
+
+func (r *PinRepository) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	if len(pins) == 0 {
+		return pins, nil
+	}
+
+	ids := make([]int64, 0, len(pins))
+	for _, p := range pins {
+		ids = append(ids, p.ID)
+	}
+
+	// ── Авторы ────────────────────────────────────────────────────
+	authors := make(map[int64]domain.UserPreview)
+	authorRows, err := r.Pool.Query(ctx, `
+		SELECT id, display_name, avatar_url
+		FROM users
+		WHERE id = ANY($1)`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load pin authors: %w", err)
+	}
+	for authorRows.Next() {
+		var id int64
+		var u domain.UserPreview
+		if err := authorRows.Scan(&id, &u.DisplayName, &u.AvatarURL); err != nil {
+			authorRows.Close()
+			return nil, fmt.Errorf("scan author: %w", err)
+		}
+		u.ID = id
+		authors[id] = u
+	}
+	authorRows.Close()
+	if err := authorRows.Err(); err != nil {
+		return nil, fmt.Errorf("authors rows error: %w", err)
+	}
+
+	// ── Теги ──────────────────────────────────────────────────────
+	tagsByPin, err := r.LoadTagsForPins(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	// ── Счётчики (saves / likes) из interactions ──────────────────
+	counts := make(map[int64]pinCounts)
+	countRows, err := r.Pool.Query(ctx, `
+		SELECT pin_id,
+		       COUNT(*) FILTER (WHERE event_type = 'save') AS saves_count,
+		       COUNT(*) FILTER (WHERE event_type = 'unsave') AS unsaves_count,
+		       COUNT(*) FILTER (WHERE event_type = 'click' AND meta_json ->> 'action' = 'like') AS likes_count
+		FROM interactions
+		WHERE pin_id = ANY($1)
+		GROUP BY pin_id`,
+		ids,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load pin counts: %w", err)
+	}
+	for countRows.Next() {
+		var pinID int64
+		var saves, unsaves, likes int64
+		if err := countRows.Scan(&pinID, &saves, &unsaves, &likes); err != nil {
+			countRows.Close()
+			return nil, fmt.Errorf("scan pin counts: %w", err)
+		}
+		counts[pinID] = pinCounts{savesCount: int(saves - unsaves), likesCount: int(likes)}
+	}
+	countRows.Close()
+	if err := countRows.Err(); err != nil {
+		return nil, fmt.Errorf("counts rows error: %w", err)
+	}
+
+	// ── is_saved для текущего пользователя ────────────────────────
+	savedIDs := make(map[int64]bool)
+	if viewerID != nil {
+		savedRows, err := r.Pool.Query(ctx, `
+			SELECT DISTINCT bp.pin_id
+			FROM board_pins bp
+			JOIN boards b ON b.id = bp.board_id
+			WHERE b.owner_id = $1 AND bp.pin_id = ANY($2)`,
+			*viewerID, ids,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("load saved pins: %w", err)
+		}
+		for savedRows.Next() {
+			var pinID int64
+			if err := savedRows.Scan(&pinID); err != nil {
+				savedRows.Close()
+				return nil, fmt.Errorf("scan saved pin: %w", err)
+			}
+			savedIDs[pinID] = true
+		}
+		savedRows.Close()
+		if err := savedRows.Err(); err != nil {
+			return nil, fmt.Errorf("saved rows error: %w", err)
+		}
+	}
+
+	// ── Мутируем пины ─────────────────────────────────────────────
+	for i := range pins {
+		if a, ok := authors[pins[i].AuthorId]; ok {
+			pins[i].Author = &a
+		}
+		if tags, ok := tagsByPin[pins[i].ID]; ok {
+			pins[i].Tags = tags
+		}
+		if c, ok := counts[pins[i].ID]; ok {
+			pins[i].SavesCount = c.savesCount
+			pins[i].LikesCount = c.likesCount
+		}
+		pins[i].IsSaved = savedIDs[pins[i].ID]
+	}
+
+	return pins, nil
+}
+
+func escapeLike(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+func (r *PinRepository) Search(ctx context.Context, query string, cursor *time.Time, limit int) (*domain.ListPinsResult, error) {
+	like := "%" + escapeLike(query) + "%"
+
+	args := []any{like}
+	paramIdx := 2
+
+	cursorClause := ""
+	if cursor != nil {
+		cursorClause = fmt.Sprintf(" AND p.created_at < $%d", paramIdx)
+		args = append(args, *cursor)
+		paramIdx++
+	}
+
+	sql := `
+		SELECT DISTINCT p.id, p.title, p.description, p.image_url,
+		       p.dominant_color, p.height, p.width, p.author_id, p.created_at
+		FROM pins p
+		LEFT JOIN pin_tags pt ON pt.pin_id = p.id
+		WHERE p.deleted_at IS NULL
+		  AND (p.title ILIKE $1 OR pt.tag ILIKE $1)` + cursorClause +
+		" ORDER BY p.created_at DESC"
+
+	if limit > 0 {
+		sql += fmt.Sprintf(" LIMIT $%d", paramIdx)
+		args = append(args, limit+1)
+		paramIdx++
+	}
+
+	rows, err := r.Pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query search: %w", err)
+	}
+	defer rows.Close()
+
+	pins := make([]domain.Pin, 0)
+	for rows.Next() {
+		var pin domain.Pin
+		if err := rows.Scan(&pin.ID, &pin.Title, &pin.Description, &pin.ImageURL,
+			&pin.DominantColor, &pin.Height, &pin.Width, &pin.AuthorId, &pin.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan search pin: %w", err)
+		}
+		pins = append(pins, pin)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	var nextCursor *string
+	if len(pins) > limit {
+		pins = pins[:limit]
+		c := pins[len(pins)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+		nextCursor = &c
+	}
+
+	return &domain.ListPinsResult{Data: pins, NextCursor: nextCursor}, nil
 }

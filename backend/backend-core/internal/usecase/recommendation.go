@@ -48,6 +48,10 @@ func (u *RecommendationUsecase) GetRelated(ctx context.Context, pinID int64, lim
 	return u.pinRepo.FindRelated(ctx, pinID, limit)
 }
 
+func (u *RecommendationUsecase) EnrichPins(ctx context.Context, pins []domain.Pin, viewerID *int64) ([]domain.Pin, error) {
+	return u.pinRepo.EnrichPins(ctx, pins, viewerID)
+}
+
 // ── Сбор кандидатов ─────────────────────────────────────────────────
 
 func (u *RecommendationUsecase) buildAndCacheFeed(ctx context.Context, userID int64, sessionID string) ([]int64, error) {

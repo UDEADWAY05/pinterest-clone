@@ -1,6 +1,7 @@
-import { fetchPins } from '@/entities/pin';
-import type { Pin } from '@/entities/pin/model/types';
-import { PinFeed } from '@/widgets/pin-feed/ui/PinFeed';
+import { fetchPinsPaginated } from '@/entities/pin';
+import { Pin } from '@/entities/pin/model/types';
+import { ApiPaginatedResponse } from '@/shared/types/response';
+import { InfinitePinFeed } from '@/widgets/pin-feed/ui/PinFeed';
 import type { Metadata } from 'next';
 
 // ── Метаданные ─────────────────────────────────────────────────
@@ -13,17 +14,17 @@ export const metadata: Metadata = {
 // ── Страница ───────────────────────────────────────────────────
 
 export const HomeView = async () => {
-  let initialPins: Pin[] | undefined;
+  let initialPages: ApiPaginatedResponse<Pin>[] | undefined;
   try {
-    initialPins = await fetchPins();
+    initialPages = [await fetchPinsPaginated()];
   } catch {
-    initialPins = [];
+    initialPages = [];
   }
 
   return (
     <main className="min-h-screen pb-10">
       <div className="container mx-auto px-4">
-        <PinFeed initialPins={initialPins} />
+        <InfinitePinFeed initialPages={initialPages} />
       </div>
     </main>
   );

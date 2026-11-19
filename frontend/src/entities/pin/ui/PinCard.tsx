@@ -6,9 +6,10 @@ interface PinCardProps {
   width: number;
   height: number;
   dominantColor: string;
+  lazy?: boolean;
 }
 
-export const PinCard = ({ title, imageUrl, width, height, dominantColor }: PinCardProps) => {
+export const PinCard = ({ title, imageUrl, width, height, dominantColor, lazy }: PinCardProps) => {
   // Состояние: загрузилась ли сама картинка в браузере?
 
   return (
@@ -22,6 +23,7 @@ export const PinCard = ({ title, imageUrl, width, height, dominantColor }: PinCa
         alt={title}
         width={width || 300}
         height={height || 200}
+        loading={lazy ? 'lazy' : 'eager'}
         // Изначально картинка прозрачная (opacity-0). Как только isImageLoaded станет true, она плавно проявится (opacity-100)
         className={`w-full h-auto object-cover transition-opacity duration-500 ease-in-out opacity-100'`}
         sizes="(max-width: 768px) 100%, (max-width: 1200px) 50vw, 33vw"

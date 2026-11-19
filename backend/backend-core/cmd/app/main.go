@@ -7,15 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/joho/godotenv"
-
-	migrate "github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-
 	"pinterest-core/internal/config"
 	"pinterest-core/internal/infra/db"
 	"pinterest-core/internal/infra/redis"
@@ -27,6 +18,14 @@ import (
 	httpserver "pinterest-core/internal/transport/http"
 	"pinterest-core/internal/transport/http/handlers"
 	"pinterest-core/internal/usecase"
+	"syscall"
+	"time"
+
+	"github.com/joho/godotenv"
+
+	migrate "github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
@@ -76,6 +75,11 @@ func main() {
 	}()
 
 
+	// ── Interactions (сбор событий) ─────────────────────────────────
+	interactionRepo := postgresrepo.NewInteractionRepository(pg.Pool)
+	interactionUC := usecase.NewInteractionUsecase(interactionRepo, 50, 3*time.Second)
+	interactionHandler := handlers.NewInteractionHandler(interactionUC)
+
 	// ── Репозитории (без кеша) ──────────────────────────────────────
 	pinPgRepo := postgresrepo.NewPinRepository(pg.Pool)
 	userPgRepo := postgresrepo.NewUserRepository(pg.Pool)
@@ -89,12 +93,11 @@ func main() {
 	pinRepo := repository.NewCachedPinRepository(pinPgRepo, cacheRepo, cfg.PinCacheTTL(), cfg.ListCacheTTL())
 	userRepo := repository.NewCachedUserRepository(userPgRepo, cacheRepo, cfg.UserCacheTTL())
 	boardRepo := repository.NewCachedBoardRepository(boardPgRepo, cacheRepo, cfg.ListCacheTTL(), cfg.BoardCacheTTL())
-
 	// ── UseCase'ы ───────────────────────────────────────────────────
 	pinUC := usecase.NewPinUsecase(pinRepo)
 	authUC := usecase.NewAuthUsecase(userRepo, sessionRepo, 7*24*time.Hour)
 	userUC := usecase.NewUserUsecase(userRepo)
-	boardUC := usecase.NewBoardUsecase(boardRepo, pinRepo)
+	boardUC := usecase.NewBoardUsecase(boardRepo, pinRepo, interactionUC) //TODO: Разобратся почему один usecase импортирует другой
 
 	// ── Storage (S3, если доступен) + Upload ───────────────────────
 	var uploadHandler *handlers.UploadHandler
@@ -112,14 +115,21 @@ func main() {
 	uploadHandler = handlers.NewUploadHandler(uploadUC, authUC)
 
 
-	// ── Interactions (сбор событий) ─────────────────────────────────
-	interactionRepo := postgresrepo.NewInteractionRepository(pg.Pool)
-	interactionUC := usecase.NewInteractionUsecase(interactionRepo, 50, 3*time.Second)
-	interactionHandler := handlers.NewInteractionHandler(interactionUC)
-
 	// ── Recommendations ─────────────────────────────────────────────
 	recommendationUC := usecase.NewRecommendationUsecase(pinRepo, cacheRepo)
 	recommendationHandler := handlers.NewRecommendationHandler(recommendationUC, authUC)
+
+	// ── Comments ────────────────────────────────────────────────────
+	commentPgRepo := postgresrepo.NewCommentRepository(pg.Pool)
+	commentRepo := repository.NewCachedCommentRepository(commentPgRepo)
+	commentUC := usecase.NewCommentUsecase(commentRepo)
+	commentHandler := handlers.NewCommentHandler(commentUC)
+
+	// ── Follow system ───────────────────────────────────────────────
+	followPgRepo := postgresrepo.NewFollowRepository(pg.Pool)
+	followRepo := repository.NewCachedFollowRepository(followPgRepo)
+	followUC := usecase.NewFollowUsecase(followRepo)
+	followHandler := handlers.NewFollowHandler(followUC)
 
 	// ── Миграции ────────────────────────────────────────────────────
 	m, err := migrate.New(
@@ -136,13 +146,13 @@ func main() {
 	// ── Handlers ────────────────────────────────────────────────────
 	pinHandler := handlers.NewPinHandler(pinUC, authUC)
 	authHandler := handlers.NewAuthHandler(authUC)
-	userHandlers := handlers.NewUserHandler(userUC)
+	userHandlers := handlers.NewUserHandler(userUC, pinUC, authUC)
 	boardHandler := handlers.NewBoardHandler(boardUC, authUC)
 
 	// ── HTTP Server ─────────────────────────────────────────────────
 	server := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
-		Handler: httpserver.NewRouter(pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler),
+		Handler: httpserver.NewRouter(pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler, commentHandler, followHandler),
 	}
 
 	stop := make(chan os.Signal, 1)

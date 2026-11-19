@@ -1,5 +1,5 @@
 // 1. URL твоего эндпоинта
-const URL = "http://localhost:8080/api/pins/create";
+const BACKEND_URL = "http://localhost:8080/api/pins/create";
 
 // 2. Твой массив с данными для наполнения
 const items = [
@@ -215,7 +215,7 @@ const items = [
 ];
 
 // Функция для задержки (аналог time.Sleep в Go)
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function runSeeder() {
   console.log(`Начинаем отправку ${items.length} элементов...`);
@@ -225,11 +225,11 @@ async function runSeeder() {
 
     try {
       // Отправляем POST запрос
-      const response = await fetch(URL, {
+      const response = await fetch(BACKEND_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Cookie: "session=LEVXuih4zIFEOpPZdwE7FILDuOvlP20vYwIEsoduUzM",
+          Cookie: "session=HI2s_S69fERBjEpGy-NtSEDnF6Nj0HcBPpKkoA25nLk",
           // Если нужна авторизация, раскомментируй строку ниже:
           // 'Authorization': 'Bearer ТВОЙ_ТОКЕН'
         },
@@ -244,7 +244,9 @@ async function runSeeder() {
         );
       }
     } catch (error) {
-      console.error(`[${i}] Ошибка запроса:`, error.message);
+      if (error instanceof Error) {
+        console.error(`[${i}] Ошибка запроса:`, error.message);
+      }
     }
 
     // Небольшая пауза в 100 мс между запросами

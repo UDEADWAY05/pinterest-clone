@@ -11,11 +11,7 @@ import {
 } from '@/shared/ui/dropdown-menu';
 
 export const Header = async () => {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('session');
-  const currentUser = sessionCookie
-    ? await fetchCurrentUser(`session=${sessionCookie.value}`).catch(() => null)
-    : null;
+  const currentUser = await fetchCurrentUser().catch(() => null);
 
   return (
     <header className="fixed top-0 left-0 right-0 h-20 z-50 py-4 px-6 flex items-center gap-2">
@@ -63,9 +59,9 @@ export const Header = async () => {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Link href="/profile">Profile</Link>
-              </DropdownMenuItem>
+              <Link href={`${currentUser.id}`}>
+                <DropdownMenuItem>Profile</DropdownMenuItem>
+              </Link>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (

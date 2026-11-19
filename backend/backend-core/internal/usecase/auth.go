@@ -32,10 +32,11 @@ func NewAuthUsecase(users repository.UserRepository, sessions repository.Session
 	}
 }
 
-func (u *AuthUsecase) Register(ctx context.Context, email, password, displayName, avatarURL string) (*domain.User, string, error) {
+func (u *AuthUsecase) Register(ctx context.Context, email, password, displayName, avatarURL, bio string) (*domain.User, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	displayName = strings.TrimSpace(displayName)
 	avatarURL = strings.TrimSpace(avatarURL)
+	bio = strings.TrimSpace(bio)
 
 	if email == "" || password == "" || displayName == "" {
 		return nil, "", errors.New("email, password and display_name are required")
@@ -57,6 +58,7 @@ func (u *AuthUsecase) Register(ctx context.Context, email, password, displayName
 		PasswordHash: string(passwordHash),
 		DisplayName:  displayName,
 		AvatarURL:    avatarURL,
+		Bio:          bio,
 	}
 
 	if err := u.Users.CreateUser(ctx, user); err != nil {
