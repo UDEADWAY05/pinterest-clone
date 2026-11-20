@@ -189,7 +189,7 @@ type CreatePinRequest struct {
 // @Success      201  {object}  render.JSONResponse{data=domain.Pin}
 // @Failure      400  {object}  render.ErrorResponse
 // @Security     SessionCookie
-// @Router       /api/pins/create [post]
+// @Router       /api/pins [post]
 func (h *PinHandler) CreatePin(w http.ResponseWriter, r *http.Request) {
 	var req CreatePinRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

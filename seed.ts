@@ -1,5 +1,5 @@
 // 1. URL твоего эндпоинта
-const BACKEND_URL = "http://localhost:8080/api/pins/create";
+const BACKEND_URL = "http://localhost:8080/api/pins";
 
 // 2. Твой массив с данными для наполнения
 const items = [
