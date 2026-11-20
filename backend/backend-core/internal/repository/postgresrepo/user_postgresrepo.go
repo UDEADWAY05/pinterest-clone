@@ -27,7 +27,6 @@ func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 		ORDER BY created_at DESC`)
 
 	if err != nil {
-		fmt.Print(err)
 		return nil, fmt.Errorf("query users: %w", err)
 	}
 	defer rows.Close()
@@ -36,13 +35,11 @@ func (r *UserRepository) ListUsers(ctx context.Context) ([]domain.User, error) {
 	for rows.Next() {
 		var user domain.User
 		if err := rows.Scan(&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName, &user.AvatarURL, &user.CreatedAt, &user.Bio); err != nil {
-			fmt.Print(err)
 			return nil, fmt.Errorf("scan user: %w", err)
 		}
 
 		users = append(users, user)
 	}
-	fmt.Print(users[0])
 	return users, nil
 }
 
