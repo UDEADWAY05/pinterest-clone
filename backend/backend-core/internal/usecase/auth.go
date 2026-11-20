@@ -80,7 +80,6 @@ func (u *AuthUsecase) Login(ctx context.Context, email, password string) (*domai
 	}
 
 	user, err := u.Users.GetUserByEmail(ctx, email)
-	fmt.Print(user, email, password)
 	if err != nil {
 		return nil, "", ErrUnauthorized
 	}

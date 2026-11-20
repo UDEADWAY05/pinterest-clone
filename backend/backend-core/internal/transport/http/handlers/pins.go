@@ -206,7 +206,11 @@ func (h *PinHandler) CreatePin(w http.ResponseWriter, r *http.Request) {
 			render.Error(w, http.StatusNotFound, "NOT_FOUND", "pin not found", err.Error())
 			return
 		}
-		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get pin", err.Error())
+		if errors.Is(err, domain.ErrBarRequest) {
+			render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "failed to create pin", err.Error())
+			return
+		}
+		render.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create pin", err.Error())
 		return
 	}
 	render.JSON(w, http.StatusCreated, pin)
