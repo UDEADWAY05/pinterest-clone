@@ -95,7 +95,7 @@ func main() {
 	boardRepo := repository.NewCachedBoardRepository(boardPgRepo, cacheRepo, cfg.ListCacheTTL(), cfg.BoardCacheTTL())
 	// ── UseCase'ы ───────────────────────────────────────────────────
 	pinUC := usecase.NewPinUsecase(pinRepo)
-	authUC := usecase.NewAuthUsecase(userRepo, sessionRepo, 7*24*time.Hour)
+	authUC := usecase.NewAuthUsecase(userPgRepo, sessionRepo, 7*24*time.Hour)
 	userUC := usecase.NewUserUsecase(userRepo)
 	boardUC := usecase.NewBoardUsecase(boardRepo, pinRepo, interactionUC) //TODO: Разобратся почему один usecase импортирует другой
 
