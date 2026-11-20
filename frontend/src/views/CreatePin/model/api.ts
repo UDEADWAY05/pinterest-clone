@@ -45,7 +45,7 @@ export function getImageDimensions(file: File): Promise<{ width: number; height:
 }
 
 export async function createPinRequest(req: CreatePinRequest): Promise<Pin> {
-  const res = await fetch('/api/pins/create', {
+  const res = await fetch('/api/pins', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

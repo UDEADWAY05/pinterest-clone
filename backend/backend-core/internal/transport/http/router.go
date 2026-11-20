@@ -58,7 +58,7 @@ func NewRouter(
 	authMw := middleware.AuthMiddleware(authHandler.UC)
 
 	// ── Protected routes (auth required) ───────────────────────────
-	mux.HandleFunc("POST /api/pins/create", authMw(pinHandler.CreatePin))
+	mux.HandleFunc("POST /api/pins", authMw(pinHandler.CreatePin))
 	mux.HandleFunc("POST /api/auth/logout", authMw(authHandler.Logout))
 	mux.HandleFunc("GET /api/user/current", authMw(authHandler.Current))
 	mux.HandleFunc("GET /api/boards/me", authMw(boardHandler.ListMyBoards))
