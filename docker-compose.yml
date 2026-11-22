@@ -11,6 +11,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
       # - ./backend-core/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.sql
+    networks:
+      - internal_net
   redis:
     image: redis:8.4-alpine
     container_name: udpinterest-redis
@@ -19,6 +21,8 @@ services:
     volumes:
       - redisdata:/data
     command: redis-server --appendonly yes
+    networks:
+      - internal_net
   minio:
     image: minio/minio:latest
     container_name: minio
@@ -32,10 +36,15 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
     restart: unless-stopped
-network:
-  data:
+    networks:
+      - internal_net
+      - public_net
+networks:
+  internal_net:
     driver: bridge
     internal: true
+  public_net:
+    driver: bridge
 volumes:
   pgdata:
   redisdata:

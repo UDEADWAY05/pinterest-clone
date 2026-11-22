@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"pinterest-core/internal/domain"
 	"pinterest-core/internal/transport/http/render"
@@ -161,15 +160,12 @@ func (h *AuthHandler) Current(w http.ResponseWriter, r *http.Request) {
         render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized", "")
         return
     }
-    fmt.Println("Current user", cookie)
 
     user, err := h.UC.Current(r.Context(), cookie.Value)
     if err != nil {
         render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized", "")
         return
     }
-
-    fmt.Println(user)
 
     writeAuthUser(w, user, http.StatusOK)
 }
