@@ -183,6 +183,42 @@ func (h *BoardHandler) RemovePinFromBoard(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// RemoveBoard удаляет доску.
+// @Summary      Удалить доску
+// @Description  Удаляет доску (только для владельца доски)
+// @Tags         boards
+// @Produce      json
+// @Success      204  "No Content"
+// @Failure      400  {object}  render.ErrorResponse
+// @Security     SessionCookie
+// @Router       /api/boards/{boardId} [delete]
+func (h *BoardHandler) RemoveBoard(w http.ResponseWriter, r *http.Request) {
+	userID, err := h.getCurrentUserID(r)
+	if err != nil {
+		render.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), "")
+		return
+	}
+
+	boardID, err := strconv.ParseInt(r.PathValue("boardId"), 10, 64)
+	if err != nil {
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "invalid board id", "")
+		return
+	}
+
+	pinID, err := strconv.ParseInt(r.PathValue("pinId"), 10, 64)
+	if err != nil {
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", "invalid pin id", "")
+		return
+	}
+
+	if err := h.UC.RemovePinFromBoard(r.Context(), userID, boardID, pinID); err != nil {
+		render.Error(w, http.StatusBadRequest, "BAD_REQUEST", err.Error(), "")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetBoardPins возвращает пины в доске.
 // @Summary      Пины доски
 // @Description  Возвращает все пины, сохранённые в указанной доске

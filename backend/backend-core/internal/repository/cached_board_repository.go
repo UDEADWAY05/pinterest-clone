@@ -121,6 +121,16 @@ func (r *CachedBoardRepository) GetBoardByID(ctx context.Context, boardID int64)
 	return b, nil
 }
 
+func (r *CachedBoardRepository) RemoveBoardByID(ctx context.Context, boardID, userID int64) error {
+	if err := r.wrapped.RemovePinFromBoard(ctx, boardID, userID); err != nil {
+		return err
+	}
+	if err := r.cache.Delete(ctx, boardPinsKey(boardID)); err != nil {
+		log.Printf("cache invalidate board pins %d: %v", boardID, err)
+	}
+	return nil
+}
+
 func (r *CachedBoardRepository) SavePinToBoard(ctx context.Context, boardID, pinID int64) (*domain.BoardPin, error) {
 	bp, err := r.wrapped.SavePinToBoard(ctx, boardID, pinID)
 	if err != nil {

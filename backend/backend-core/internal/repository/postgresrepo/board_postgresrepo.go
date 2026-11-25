@@ -38,7 +38,7 @@ func (r *BoardRepository) ListUserBoards(ctx context.Context, userID int64) ([]d
     b.owner_id,
     b.is_private,
     b.created_at,
-    b.is_default
+    b.is_default,
     COALESCE(
         json_agg(
             json_build_object(
@@ -61,7 +61,7 @@ func (r *BoardRepository) ListUserBoards(ctx context.Context, userID int64) ([]d
     LIMIT 3
 		) bp ON TRUE
 		WHERE b.owner_id = $1
-		GROUP BY b.id, b.title, b.owner_id, b.is_private, b.created_at;`,
+		GROUP BY b.id, b.title, b.owner_id, b.is_private, b.created_at, b.is_default;`,
 		userID,
 	)
 	if err != nil {
@@ -93,6 +93,20 @@ func (r *BoardRepository) GetBoardByID(ctx context.Context, boardID int64) (*dom
 	}
 	return &b, nil
 }
+
+func (r *BoardRepository) RemoveBoardByID(ctx context.Context, boardID int64, userID int64) error {
+	var b domain.Board
+	err := r.Pool.QueryRow(ctx, `
+		DELETE FROM boards WHERE id = $1 AND is_default = false`,
+		boardID,
+	).Scan(&b.ID, &b.OwnerID, &b.Title, &b.IsPrivate, &b.CreatedAt)
+
+	if err != nil {
+		return nil
+	}
+	return err
+}
+
 
 
 func (r *BoardRepository) SavePinToBoard(ctx context.Context, boardID, pinID int64) (*domain.BoardPin, error) {

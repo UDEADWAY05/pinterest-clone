@@ -99,10 +99,16 @@ func mapNoRows(err error, notFound error) error {
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *domain.User) error {
 	err := r.Pool.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, display_name, avatar_url, bio)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at`,
-		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL, user.Bio,
+		WITH new_user AS (
+			INSERT INTO users (email, password_hash, display_name, avatar_url, bio)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id, created_at
+		), new_board AS (
+			INSERT INTO boards (owner_id, title, is_private, is_default)
+			SELECT id, 'profile', FALSE, TRUE FROM new_user
+		)
+		SELECT id, created_at FROM new_user`,
+		user.Email, user.PasswordHash, user.DisplayName, user.AvatarURL, user.Bio, "profile",
 	).Scan(&user.ID, &user.CreatedAt)
 
 	if err != nil {

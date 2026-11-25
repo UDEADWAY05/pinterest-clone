@@ -17,6 +17,7 @@ import (
 	"pinterest-core/internal/repository/storagerepo"
 	httpserver "pinterest-core/internal/transport/http"
 	"pinterest-core/internal/transport/http/handlers"
+	"pinterest-core/internal/transport/http/middleware"
 	"pinterest-core/internal/usecase"
 	"syscall"
 	"time"
@@ -150,9 +151,16 @@ func main() {
 	boardHandler := handlers.NewBoardHandler(boardUC, authUC)
 
 	// ── HTTP Server ─────────────────────────────────────────────────
+	corsCfg := middleware.CORSConfig{
+		AllowedOrigins:   cfg.AllowedOrigins,
+		AllowedMethods:   "GET, POST, PUT, DELETE, OPTIONS",
+		AllowedHeaders:   "Content-Type, Authorization",
+		AllowedCredentials: cfg.AllowedCredentials,
+	}
+
 	server := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
-		Handler: httpserver.NewRouter(pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler, commentHandler, followHandler),
+		Handler: httpserver.NewRouter(corsCfg, pinHandler, authHandler, userHandlers, boardHandler, uploadHandler, interactionHandler, recommendationHandler, commentHandler, followHandler),
 	}
 
 	stop := make(chan os.Signal, 1)
