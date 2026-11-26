@@ -37,6 +37,16 @@ type Config struct {
 	CacheListTTL  int // TTL для списков/лент (по умолчанию 60 = 1 мин)
 	CacheUserTTL  int // TTL для профиля пользователя (по умолчанию 600 = 10 мин)
 	CacheBoardTTL int // TTL для одной доски (по умолчанию 300 = 5 мин)
+
+	//CORS
+	AllowedMethods string
+	AllowedHeaders string
+	AllowedCredentials bool
+	AllowedOrigins map[string]bool
+}
+
+var allowOrigins map[string]bool = map[string]bool{
+	"http://localhost:3000": true,
 }
 
 func Load() (*Config, error) {
@@ -59,6 +69,11 @@ func Load() (*Config, error) {
 		CacheListTTL:       getEnvInt("CACHE_LIST_TTL", 60),
 		CacheUserTTL:       getEnvInt("CACHE_USER_TTL", 600),
 		CacheBoardTTL:      getEnvInt("CACHE_BOARD_TTL", 300),
+
+		AllowedMethods: "GET, POST, PUT, DELETE, OPTIONS",
+		AllowedHeaders: "Content-Type, Authorization",
+		AllowedCredentials: true,
+		AllowedOrigins: allowOrigins,
 	}
 
 	if c.PostgresDSN == "" {

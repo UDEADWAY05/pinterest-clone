@@ -22,6 +22,7 @@ import (
 // @name Authorization
 
 func NewRouter(
+	cfgCors middleware.CORSConfig,
 	pinHandler *handlers.PinHandler,
 	authHandler *handlers.AuthHandler,
 	userHandler *handlers.UserHandler,
@@ -63,6 +64,7 @@ func NewRouter(
 	mux.HandleFunc("GET /api/user/current", authMw(authHandler.Current))
 	mux.HandleFunc("GET /api/boards/me", authMw(boardHandler.ListMyBoards))
 	mux.HandleFunc("POST /api/boards", authMw(boardHandler.CreateBoard))
+	mux.HandleFunc("DELETE /api/boards", authMw(boardHandler.RemoveBoard))
 	mux.HandleFunc("POST /api/boards/{boardId}/pins/{pinId}", authMw(boardHandler.SavePinToBoard))
 	mux.HandleFunc("DELETE /api/boards/{boardId}/pins/{pinId}", authMw(boardHandler.RemovePinFromBoard))
 	mux.HandleFunc("POST /api/uploads/presign", authMw(uploadHandler.PresignUpload))
@@ -75,5 +77,5 @@ func NewRouter(
 
 	mux.HandleFunc("GET /swagger/", httpSwagger.WrapHandler)
 
-	return middleware.CorsMiddleware(mux)
+	return middleware.CorsMiddleware(cfgCors, mux)
 }

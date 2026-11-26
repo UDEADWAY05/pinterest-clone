@@ -85,6 +85,23 @@ func (u *BoardUsecase) GetBoardByID(ctx context.Context, boardID int64) (*domain
 	return u.Repo.GetBoardByID(ctx, boardID)
 }
 
+func (u *BoardUsecase) RemoveBoardByID(ctx context.Context, boardID int64, userID int64) error {
+	board, err := u.Repo.GetBoardByID(ctx, boardID)
+	if err != nil {
+		return errors.New("board not found")
+	}
+	if board.OwnerID != userID {
+		return errors.New("you don't own this board")
+	}
+
+	err = u.Repo.RemoveBoardByID(ctx, boardID, userID)
+
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // ── Сохранение пина в доску ──────────────────────────────────────────
 
 // SavePinToBoard сохраняет пин в доску.
@@ -118,30 +135,32 @@ func (u *BoardUsecase) SavePinToBoard(ctx context.Context, userID, boardID, pinI
 	return bp, nil
 }
 
-// GetOrCreateDefaultBoard возвращает доску по умолчанию для пользователя
-func (u *BoardUsecase) GetOrCreateDefaultBoard(ctx context.Context, userID int64) (*domain.Board, error) {
+// GetDefaultBoard возвращает доску по умолчанию для пользователя
+func (u *BoardUsecase) GetDefaultBoard(ctx context.Context, userID int64) (*domain.Board, error) {
 	board, err := u.Repo.GetDefaultBoard(ctx, userID)
+
 	if err != nil {
-		return board, nil
-	}
-	if !errors.Is(err, domain.ErrNotFound) {
 		return nil, err
 	}
 
-	newBoard := &domain.Board{
-		OwnerID: userID,
-		Title:   defaultBoardTitle,
-		IsDefault: true,
-	}
-	if err := u.Repo.CreateBoard(ctx, newBoard); err != nil {
-		board, err := u.Repo.GetDefaultBoard(ctx, userID) //Не оптимиальное решение но для mvp пойдет)
-		if err != nil {
-			return nil, err
-		}
-		return board, nil
-	};
-	
-	return nil, err
+	return board, nil
+
+
+//
+// 	newBoard := &domain.Board{
+// 		OwnerID: userID,
+// 		Title:   defaultBoardTitle,
+// 		IsDefault: true,
+// 	}
+// 	if err := u.Repo.CreateBoard(ctx, newBoard); err != nil {
+// 		board, err := u.Repo.GetDefaultBoard(ctx, userID) //Не оптимиальное решение но для mvp пойдет)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		return board, nil
+// 	};
+//
+// 	return nil, err
 }
 
 // ── Удаление пина из доски ───────────────────────────────────────────
@@ -163,7 +182,7 @@ func (u *BoardUsecase) RemovePinFromBoard(ctx context.Context, userID, boardID, 
 }
 
 func (u *BoardUsecase) SavePinToProfile(ctx context.Context, userID, pinID int64, sessionId string) error {
-	board, err := u.GetOrCreateDefaultBoard(ctx, userID)
+	board, err := u.GetDefaultBoard(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -180,7 +199,7 @@ func (u *BoardUsecase) SavePinToProfile(ctx context.Context, userID, pinID int64
 
 
 func (u *BoardUsecase) RemovePinFromProfile(ctx context.Context, userID, pinID int64, sessionId string) error {
-	board, err := u.GetOrCreateDefaultBoard(ctx, userID)
+	board, err := u.GetDefaultBoard(ctx, userID)
 	if err != nil {
 		return nil
 	}
